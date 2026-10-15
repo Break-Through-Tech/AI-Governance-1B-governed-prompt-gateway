@@ -1,6 +1,4 @@
-# AI Studio Challenge Project Title
-
-> 💡 **Note for the team:** This is just a template. Update the above title with your AI Studio Challenge Project name. Remove all guidance notes and example text in this template and populate this README with your own content. You can work on this README throughout AI Studio, and get feedback from your AI Studio Coach and Challenge Advisor before finalizing it.  
+# AI-Governance-1B Governed Prompt Gateway
 
 ---
 
@@ -10,11 +8,14 @@
 
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
-| Taylor Nguyen    | @taylornguyen | Data exploration, visualization, overall project coordination            |
-| Jordan Ramirez   | @jramirez     | Data collection, exploratory data analysis (EDA), dataset documentation  |
-| Amina Hassan     | @aminahassan  | Data preprocessing, feature engineering, data validation                 |
-| Priya Mehta      | @pmehta       | Model selection, hyperparameter tuning, model training and optimization  |
-| Chris Park       | @chrispark    | Model evaluation, performance analysis, results interpretation           |
+| Juee Deshmukh    | jueedeshmukh333@gmail.com |                                                              |
+| Riya Zingade     |               |                                                                          |
+| Mohammed Musawwir| musawwir111@gmail.com  |                                                                 |
+| Naivy Dominguez  | naivydominguez05@gmail.com |                                                             |
+| Oluchi Muoguilim | omuogui@emory.edu    |                                                                   |
+| Hadassah Mwazemb | hm109@wellesley.edu    |                                                                 |
+| Vanessa Vy       | vyvanessa07@gmail.com    |                                                               |
+| Daniel Diyali    | diyalidaniel@gmail.com    |                                                              |
 
 ---
 
@@ -22,10 +23,10 @@
 
 **Example:**
 
-- Developed a machine learning model using `[model type/technique]` to address `[challenge project task]`.
-- Achieved `[key metric or result]`, demonstrating `[value or impact]` for `[host company]`.
-- Generated actionable insights to inform business decisions at `[host company or stakeholders]`.
-- Implemented `[specific methodology]` to address industry constraints or expectations.
+- Developing machine learning models to detect and classify toxic prompts, contributing to safer and more responsible AI systems.
+- Utilizing pre-trained RoBERTa-based models, including s-nlp/roberta_toxicity_classifier for toxic prompt detection and unitary/unbiased-toxic-roberta for toxicity classification.
+- Evaluating model performance using metrics such as accuracy, precision, recall, and F1-score to assess the effectiveness of toxic prompt detection and classification.
+- Supporting AI governance and responsible AI development by investigating methods for identifying harmful content and improving AI safety.
 
 ---
 
@@ -45,9 +46,9 @@
 
 **Describe:**
 
-- How this project is connected to the Break Through Tech AI Program
-- Your AI Studio host company and the project objective and scope
-- The real-world significance of the problem and the potential impact of your work
+- Our project focuses on AI Governance, specifically developing machine learning solutions to detect and classify toxic prompts submitted to AI systems. We are exploring pre-trained RoBERTa-based models to identify potentially harmful inputs and classify different types of toxicity. Through this approach, we aim to better understand how natural language processing (NLP) can support AI safety and responsible AI development.
+
+- As AI systems become increasingly integrated into everyday applications, identifying harmful or inappropriate inputs is an important part of maintaining safe and trustworthy interactions. Our work aims to contribute to these efforts by exploring methods for detecting toxic content, evaluating model effectiveness, and understanding the challenges of building reliable AI safety tools.
 
 ---
 
