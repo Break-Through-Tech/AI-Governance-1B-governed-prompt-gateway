@@ -9,7 +9,7 @@
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
 | Juee Deshmukh    | jueedeshmukh333@gmail.com |                                                              |
-| Riya Zingade     |               |                                                                          |
+| Riya Zingade     | riya.zingade@gmail.com |                                                                 |
 | Mohammed Musawwir| musawwir111@gmail.com  |                                                                 |
 | Naivy Dominguez  | naivydominguez05@gmail.com |                                                             |
 | Oluchi Muoguilim | omuogui@emory.edu    |                                                                   |
