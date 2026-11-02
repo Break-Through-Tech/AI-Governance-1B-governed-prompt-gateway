@@ -4,3 +4,5 @@ fastapi==0.143.0
 uvicorn==0.54.0
 huggingface_hub==1.33.0
 joblib==1.6.0
+sentence-transformers
+faiss-cpu
