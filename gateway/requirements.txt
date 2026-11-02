@@ -1,0 +1,9 @@
+# Gateway backend. Install from the repo root:  pip install -r gateway/requirements.txt
+langgraph>=1.2,<2
+pyyaml>=6.0
+pytest>=9.0
+
+# Optional, only when switched on in config.yaml:
+#   optimizer.token_counter: spacy                    -> spacy>=3.8,<3.9 (already in the root requirements.txt)
+#   optimizer.token_counter: hf:<repo>                -> tokenizers
+#   optimizer.fidelity.similarity_backend: embedding  -> sentence-transformers
