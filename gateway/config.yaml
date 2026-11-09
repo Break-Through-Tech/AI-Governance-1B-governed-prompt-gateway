@@ -1,0 +1,60 @@
+# Every threshold, model and price the gateway uses. Nodes and routers read from here;
+# nothing below is hardcoded in code. Each owner edits only their own section.
+
+intent:                       # owner: TBD
+  default_intent: general
+
+risk:                         # owner: Juee / Daniel
+  block_threshold: 0.80       # risk_score >= this  -> unsafe (blocked)
+  redirect_threshold: 0.50    # risk_score >= this  -> redirect (human handoff)
+  # STUB ONLY: until the real classifier is wired in, these phrases mark a prompt unsafe.
+  stub_block_phrases:
+    - ignore previous instructions
+    - ignore all previous instructions
+    - hack into
+    - jailbreak
+  stub_redirect_phrases:
+    - cancel my policy
+    - change my beneficiary
+  messages:
+    unsafe: "I can't help with that request. If you have a question about your policy or a claim, I'm happy to help."
+    redirect: "This request needs a licensed agent. I'm connecting you with one now."
+
+optimizer:                    # owner: Riya
+  token_counter: estimate     # estimate | spacy | hf:<tokenizer repo> (e.g. hf:openai/gpt-oss-120b)
+  max_attempts: 2             # 1st attempt in "full" mode; on fidelity failure, retry in "safe" mode
+  techniques:
+    full: [whitespace, formatting, filler, verbose, dedup, prune, telegraphic]
+    safe: [whitespace, formatting, filler, verbose, dedup]
+  fidelity:
+    similarity_backend: lexical       # lexical (no dependencies) | embedding (sentence-transformers)
+    embedding_model: sentence-transformers/all-MiniLM-L6-v2
+    min_similarity: 0.80              # whole-prompt similarity, original vs optimized
+    min_entity_recall: 1.0            # share of numbers / IDs / amounts that must survive
+    require_question_entities: true   # every number / ID in the user's question must survive
+
+cache:                        # owner: Vanessa
+  backend: stub               # stub (exact match, in memory) | semantic (toxicity-detection-api/cache.py)
+  min_similarity: 0.90
+
+routing:                      # owner: TBD
+  default_model: gpt-oss-120b
+  max_model_fallbacks: 2      # model failures allowed before the query fails
+  tier_order: [Small, Medium, Large]
+  default_price_per_1m_input: 3.0     # for models with no list price (free tiers)
+  # Mirrors MODELS in website/site/app.js. price / price_out are $ per 1M tokens.
+  models:
+    - {id: lfm-2.5-2.6b,           tier: Small,  provider: OpenRouter,       api: "liquid/lfm-2.5-2.6b:free"}
+    - {id: llama-3.1-8b,           tier: Small,  provider: Groq,             api: llama-3.1-8b-instant}
+    - {id: gpt-oss-20b,            tier: Small,  provider: Groq,             api: openai/gpt-oss-20b, price: 0.075, price_out: 0.30}
+    - {id: gemma-4-26b,            tier: Medium, provider: OpenRouter,       api: "google/gemma-4-26b-a4b-it:free"}
+    - {id: qwen3.8-27b,            tier: Medium, provider: Groq,             api: qwen/qwen3.8-27b, price: 0.80, price_out: 4.00}
+    - {id: nemotron-3.5-lightning, tier: Medium, provider: OpenRouter,       api: "nvidia/nemotron-3.5-lightning:free"}
+    - {id: gemma-4-31b,            tier: Medium, provider: Google AI Studio, api: gemma-4-31b-it}
+    - {id: llama-3.3-70b,          tier: Large,  provider: Groq,             api: llama-3.3-70b-versatile}
+    - {id: gpt-oss-120b,           tier: Large,  provider: Groq,             api: openai/gpt-oss-120b, price: 0.15, price_out: 0.60}
+    - {id: nemotron-3-super,       tier: Large,  provider: OpenRouter,       api: "nvidia/nemotron-3-super-120b-a12b:free"}
+
+generation:                   # owner: TBD
+  simulate: true              # true = no API calls; returns a placeholder response
+  simulate_fail_models: []    # model ids that fail on purpose (to test the fallback path)

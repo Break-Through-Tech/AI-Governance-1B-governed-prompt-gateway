@@ -113,13 +113,49 @@
     { id: 'respond', label: 'Respond', route: 'overview' }
   ];
 
+  // Pages in walk-through order; the top timeline and the Back / Next bar follow this list.
+  var STEPS = [
+    { route: 'overview', label: 'Overview' },
+    { route: 'risk', label: 'Risk screening' },
+    { route: 'optimizer', label: 'Token optimizer' },
+    { route: 'cache', label: 'Semantic cache' },
+    { route: 'routing', label: 'Model routing' },
+    { route: 'audit', label: 'Audit log' }
+  ];
+  function stepIndex(r) { for (var i = 0; i < STEPS.length; i++) if (STEPS[i].route === r) return i; return 0; }
+
+  // ---------- models ----------
+  // Open-weight models callable on a free hosted tier. Each tokenizer is the model's own,
+  // loaded from its (ungated) Hugging Face repo. Prices are $ / 1M tokens where the provider
+  // publishes one; null means free tier with no list price, so the top-bar price is kept.
+  var MODELS = [
+    { id: 'lfm-2.5-2.6b', name: 'LFM 2.5 2.6B', provider: 'OpenRouter', api: 'liquid/lfm-2.5-2.6b:free', tokenizer: 'LiquidAI/LFM2.5-2.6B', tier: 'Small' },
+    { id: 'llama-3.1-8b', name: 'Llama 3.1 8B', provider: 'Groq', api: 'llama-3.1-8b-instant', tokenizer: 'unsloth/Llama-3.1-8B-Instruct', tier: 'Small' },
+    { id: 'gpt-oss-20b', name: 'gpt-oss-20b', provider: 'Groq', api: 'openai/gpt-oss-20b', tokenizer: 'openai/gpt-oss-20b', tier: 'Small', price: 0.075, priceOut: 0.30 },
+    { id: 'gemma-4-26b', name: 'Gemma 4 26B-A4B', provider: 'OpenRouter', api: 'google/gemma-4-26b-a4b-it:free', tokenizer: 'google/gemma-4-26B-A4B-it', tier: 'Medium' },
+    { id: 'qwen3.8-27b', name: 'Qwen 3.8 27B', provider: 'Groq (preview)', api: 'qwen/qwen3.8-27b', tokenizer: 'Qwen/Qwen3.8-27B', tier: 'Medium', price: 0.80, priceOut: 4.00 },
+    { id: 'nemotron-3.5-lightning', name: 'Nemotron 3.5 Lightning 30B', provider: 'OpenRouter', api: 'nvidia/nemotron-3.5-lightning:free', tokenizer: 'nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16', tier: 'Medium' },
+    { id: 'gemma-4-31b', name: 'Gemma 4 31B', provider: 'Google AI Studio', api: 'gemma-4-31b-it', tokenizer: 'google/gemma-4-31B-it', tier: 'Medium' },
+    { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', provider: 'Groq', api: 'llama-3.3-70b-versatile', tokenizer: 'unsloth/Llama-3.3-70B-Instruct', tier: 'Large' },
+    { id: 'gpt-oss-120b', name: 'gpt-oss-120b', provider: 'Groq', api: 'openai/gpt-oss-120b', tokenizer: 'openai/gpt-oss-120b', tier: 'Large', price: 0.15, priceOut: 0.60 },
+    { id: 'nemotron-3-super', name: 'Nemotron 3 Super 120B', provider: 'OpenRouter', api: 'nvidia/nemotron-3-super-120b-a12b:free', tokenizer: 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8', tier: 'Large' }
+  ];
+  var MODEL_BY_ID = {};
+  MODELS.forEach(function (m) { MODEL_BY_ID[m.id] = m; });
+  var DEFAULT_MODEL = 'gpt-oss-120b';
+
   // ---------- state ----------
   var KEY = 'prompt-gateway-state-v2';
-  var state = { prompt: SAMPLE, on: preset(), lastTech: null, showDiff: true, price: 3, qpd: 50000, stage: 2 };
+  var state = { prompt: SAMPLE, on: preset(), lastTech: null, showDiff: true, price: 3, qpd: 50000, stage: 2, step: 0, model: null };
   try {
     var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (saved) state = Object.assign(state, saved, { on: Object.assign(preset(), saved.on) });
   } catch (e) { /* storage unavailable */ }
+  if (!MODEL_BY_ID[state.model]) {
+    state.model = DEFAULT_MODEL;
+    if (MODEL_BY_ID[DEFAULT_MODEL].price != null) state.price = MODEL_BY_ID[DEFAULT_MODEL].price;
+  }
+  function model() { return MODEL_BY_ID[state.model]; }
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 
   // ---------- token estimate ----------
@@ -133,6 +169,93 @@
       else n += 1;
     }
     return n;
+  }
+
+  // ---------- model tokenizers ----------
+  // The selected model's tokenizer.json is fetched from Hugging Face and run in the browser
+  // with tokenizers.js. Until it loads (or if it fails) counts fall back to estTokens.
+  var TOKENIZERS_JS = 'https://cdn.jsdelivr.net/npm/@huggingface/tokenizers@0.2.0/dist/tokenizers.min.mjs';
+  var tok = { model: null, status: 'idle', error: null };
+  var tokLoaded = {};   // model id -> Tokenizer, so switching back is instant
+  var tokLib = null;
+  var countCache = new Map();
+
+  function fetchJson(url) {
+    // Cache API keeps large tokenizer files (Gemma's is tens of MB) across visits.
+    var get = function () { return fetch(url).then(function (res) { if (!res.ok) throw new Error(res.status + ' ' + url); return res; }); };
+    var cached = null;
+    try { cached = window.caches && caches.open('hf-tokenizers'); } catch (e) {}
+    if (!cached) return get().then(function (res) { return res.json(); });
+    return cached.then(function (c) {
+      return c.match(url).then(function (hit) {
+        if (hit) return hit.json();
+        return get().then(function (res) { c.put(url, res.clone()).catch(function () {}); return res.json(); });
+      });
+    }, function () { return get().then(function (res) { return res.json(); }); });
+  }
+  function loadTokenizer() {
+    var m = model();
+    countCache.clear();
+    if (tokLoaded[m.id]) { tok = { model: m.id, status: 'ready', error: null }; return; }
+    tok = { model: m.id, status: 'loading', error: null };
+    var base = 'https://huggingface.co/' + m.tokenizer + '/resolve/main/';
+    tokLib = tokLib || import(TOKENIZERS_JS);
+    Promise.all([tokLib, fetchJson(base + 'tokenizer.json'), fetchJson(base + 'tokenizer_config.json')])
+      .then(function (r) {
+        tokLoaded[m.id] = new r[0].Tokenizer(r[1], r[2]);
+        if (tok.model === m.id) { tok.status = 'ready'; countCache.clear(); refresh(); }
+      })
+      .catch(function (e) {
+        if (String(e).indexOf(TOKENIZERS_JS) >= 0) tokLib = null;
+        if (tok.model === m.id) { tok.status = 'error'; tok.error = e; countCache.clear(); refresh(); }
+      });
+  }
+  function exact() { return tok.status === 'ready'; }
+  function countTokens(s) {
+    if (!exact()) return estTokens(s);
+    var n = countCache.get(s);
+    if (n === undefined) {
+      n = tokLoaded[tok.model].encode(s, { add_special_tokens: false }).ids.length;
+      if (countCache.size > 500) countCache.clear();
+      countCache.set(s, n);
+    }
+    return n;
+  }
+  function tokLabel() {
+    var m = model();
+    return tok.status === 'ready' ? 'Exact · ' + m.name + ' tokenizer'
+      : tok.status === 'loading' ? 'Estimated · loading ' + m.name + ' tokenizer'
+      : 'Estimated tokens';
+  }
+
+  // ---------- spaCy tokens ----------
+  // A separate, linguistic data point: spaCy splits text into words and punctuation rather than
+  // the subword pieces models bill by. Counts come from website/server.py; without it they're hidden.
+  var spacy = { available: null, name: '', counts: {}, timer: null };
+  function requestSpacy(texts) {
+    var missing = texts.filter(function (t) { return !(t in spacy.counts); });
+    if (!missing.length || spacy.available === false) return;
+    clearTimeout(spacy.timer);
+    spacy.timer = setTimeout(function () {
+      fetch('api/spacy/count', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: missing }) })
+        .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+        .then(function (d) {
+          if (Object.keys(spacy.counts).length > 200) spacy.counts = {};
+          missing.forEach(function (t, i) { spacy.counts[t] = d.counts[i]; });
+          spacy.available = true; spacy.name = d.tokenizer;
+          refresh();
+        })
+        .catch(function () { spacy.available = false; refresh(); });
+    }, 250);
+  }
+  function spacySub(text) {
+    if (spacy.available === false) return 'spaCy · run website/server.py';
+    var n = spacy.counts[text];
+    return n == null ? 'spaCy · counting…' : 'spaCy · ' + fmt(n) + ' word tokens';
+  }
+  function spacyReduction(a, b) {
+    var x = spacy.counts[a], y = spacy.counts[b];
+    return x == null || y == null || !x ? '' : 'spaCy · −' + ((x - y) / x * 100).toFixed(1) + '% word tokens';
   }
 
   // ---------- optimizer engine ----------
@@ -237,26 +360,26 @@
     });
   }
   function runPipeline(text, on) {
-    var units = splitUnits(text), steps = [], prev = estTokens(text);
+    var units = splitUnits(text), steps = [], prev = countTokens(text);
     TECHS.forEach(function (t) {
       if (!on[t.id]) return;
       var changes = [];
       if (SPAN_RULES[t.id]) applySpan(units, t.id, SPAN_RULES[t.id], changes);
       else if (t.id === 'dedup') applyDedup(units, changes);
       else if (t.id === 'prune') applyPrune(units, changes);
-      var tok = estTokens(units.map(liveText).join(''));
-      steps.push({ tech: t, before: prev, after: tok, changes: changes });
-      prev = tok;
+      var n = countTokens(units.map(liveText).join(''));
+      steps.push({ tech: t, before: prev, after: n, changes: changes });
+      prev = n;
     });
     return { units: units, steps: steps, after: prev, text: units.map(liveText).join('') };
   }
 
   var memo = { key: null, val: null };
   function compute() {
-    var key = state.prompt + '\u0000' + JSON.stringify(state.on) + '\u0000' + state.price + '\u0000' + state.qpd;
+    var key = state.prompt + '\u0000' + JSON.stringify(state.on) + '\u0000' + state.price + '\u0000' + state.qpd + '\u0000' + state.model + '\u0000' + tok.status;
     if (memo.key === key) return memo.val;
     var base = runPipeline(state.prompt, state.on);
-    var orig = estTokens(state.prompt);
+    var orig = countTokens(state.prompt);
     var stepById = {};
     base.steps.forEach(function (s) { stepById[s.tech.id] = s; });
     var potential = {};
@@ -271,7 +394,10 @@
       : pct < 30 ? { label: 'Below target', cls: 'st-low' }
       : pct <= 50 ? { label: 'Within target', cls: 'st-in' }
       : { label: 'Above target · review quality', cls: 'st-high' };
-    var log = [{ t: '14:02:07.118', op: 'risk_screen.pass', v: 'stage 2', cls: 'd-off' }];
+    var log = [
+      { t: '14:02:07.118', op: 'risk_screen.pass', v: 'stage 2', cls: 'd-off' },
+      { t: '14:02:07.124', op: 'tokenize  ' + model().tokenizer, v: exact() ? 'exact' : 'estimated', cls: 'd-off' }
+    ];
     TECHS.forEach(function (t, i) {
       var s = stepById[t.id];
       log.push({ t: '14:02:07.' + (131 + i * 9), op: 'optimize.' + t.id + (s ? '' : '  skipped'), v: s ? '−' + (s.before - s.after) + ' tok' : '0 tok', cls: s ? 'd-on' : 'd-off' });
@@ -279,7 +405,7 @@
     log.push({ t: '14:02:07.211', op: 'optimize.complete  ' + orig + ' → ' + base.after, v: pct.toFixed(1) + '%', cls: 'seg-keep' });
     memo.key = key;
     memo.val = {
-      orig: orig, after: base.after, saved: saved, pct: pct, status: status, units: base.units,
+      orig: orig, after: base.after, ap: exact() ? '' : '≈', saved: saved, pct: pct, status: status, units: base.units,
       steps: base.steps, stepById: stepById, potential: potential, optText: base.text.trim(), log: log,
       savedDay: saved * state.qpd / 1e6 * state.price,
       activeCount: TECHS.filter(function (t) { return state.on[t.id]; }).length
@@ -293,6 +419,14 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  function modelOptions() {
+    return ['Small', 'Medium', 'Large'].map(function (tier) {
+      return '<optgroup label="' + tier + '">' + MODELS.filter(function (m) { return m.tier === tier; }).map(function (m) {
+        return '<option value="' + m.id + '"' + (m.id === state.model ? ' selected' : '') + '>' + esc(m.name) + ' · ' + esc(m.provider) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+  }
+  function priceFmt(v) { v = Number(v); return '$' + (v < 0.1 ? v.toFixed(3) : v.toFixed(2)); }
   function money(v) { return '$' + v.toFixed(v < 1 ? 4 : 2); }
   function fmt(n) { return Number(n).toLocaleString('en-US'); }
   function showWs(s) { return s.replace(/ /g, '·').replace(/\t/g, '→').replace(/\n/g, '↵\n'); }
@@ -321,16 +455,9 @@
   // ---------- shared fragments ----------
   function header(o) {
     return '<header class="head"><div class="head-text">' +
-      '<div class="crumbs"><span>Pipeline</span>' + ICON.chev + '<span>Query #Q-0001</span><span class="tag">Estimated tokens</span></div>' +
+      '<div class="crumbs"><span>Pipeline</span>' + ICON.chev + '<span>Query #Q-0001</span><span class="tag" data-tok-label>' + esc(tokLabel()) + '</span></div>' +
       '<h1>' + esc(o.title) + '</h1><p class="lede">' + esc(o.lede) + '</p></div>' +
       (o.actions ? '<div class="actions">' + o.actions + '</div>' : '') + '</header>';
-  }
-  function pipeline() {
-    return '<ol class="pipe" aria-label="Pipeline progress">' + STAGES.map(function (s, i) {
-      var cls = i < state.stage ? 'done' : i === state.stage ? 'cur' : 'todo';
-      var mark = cls === 'done' ? ICON.check : '<span class="dot ' + (cls === 'cur' ? 'dot-cur' : 'dot-todo') + '"></span>';
-      return '<li class="' + cls + '"' + (cls === 'cur' ? ' aria-current="step"' : '') + '><a href="#' + s.route + '">' + mark + esc(s.label) + '</a></li>';
-    }).join('') + '</ol>';
   }
   function stat(label, val, unit, sub, accent) {
     return '<div class="stat"><span class="stat-label">' + esc(label) + '</span>' +
@@ -341,6 +468,10 @@
     return '<div class="log">' + rows.map(function (r) {
       return '<div><span class="ts">' + esc(r.t) + '</span><span class="op">' + esc(r.op) + '</span><span class="' + r.cls + '">' + esc(r.v) + '</span></div>';
     }).join('') + '</div>';
+  }
+  function responsePanel() {
+    return '<section class="panel panel-fill">' + panelTitle(ICON.chat, 'Response (sample)') +
+      '<p class="quote">Yes — water damage from a sudden burst pipe is covered under your home policy (§4.2) up to the dwelling limit, less your deductible. To file a claim, submit it within 60 days of the loss and include photos and a repair estimate.</p></section>';
   }
   function panelTitle(icon, text) { return '<div class="title">' + icon + '<h2>' + esc(text) + '</h2></div>'; }
 
@@ -353,9 +484,14 @@
     return header({
       title: 'Token optimizer',
       lede: 'Enter a prompt, then click techniques to apply them. Each one runs in order and shows exactly what it removed or rewrote.',
-      actions: '<button type="button" class="btn btn-ghost" data-act="reset">' + ICON.reset + 'Reset to recommended</button>' +
-        '<button type="button" class="btn btn-primary" data-act="continue-cache">Continue to cache lookup' + ICON.arrow + '</button>'
-    }) + pipeline() +
+      actions: '<button type="button" class="btn btn-ghost" data-act="reset">' + ICON.reset + 'Reset to recommended</button>'
+    }) +
+    '<section class="model-bar" aria-label="Model">' +
+      '<label class="model-label" for="model">Model</label>' +
+      '<select id="model" class="select model-select">' + modelOptions() + '</select>' +
+      '<span class="mono-sm" id="model-meta"></span>' +
+      '<span class="tok-note" id="tok-status" role="status" aria-live="polite"></span>' +
+    '</section>' +
     '<section class="stats" aria-label="Token metrics" id="opt-stats"></section>' +
     '<section class="panel" aria-label="Reduction against target" style="padding:20px" id="opt-band"></section>' +
     '<section class="panel" aria-label="Optimization techniques">' +
@@ -373,7 +509,7 @@
         '<div class="prompt-body prompt-body-fill">' +
           '<label class="sr-only" for="prompt-in">Prompt to optimize</label>' +
           '<textarea id="prompt-in" class="prompt-in" spellcheck="false" placeholder="Paste a system prompt, context and question…">' + esc(state.prompt) + '</textarea>' +
-          '<p class="hint">Token counts are estimated with a heuristic tokenizer; real counts vary by model. Nothing you type leaves your browser.</p>' +
+          '<p class="hint" id="tok-hint"></p>' +
         '</div></article>' +
       '<article class="prompt"><div class="prompt-head">' + panelTitle(ICON.compress, 'Optimized prompt') +
         '<div class="row-actions" style="gap:4px"><span class="mono-sm" id="opt-tok"></span>' +
@@ -395,10 +531,14 @@
 
   function updateOptimizer() {
     var r = compute(), on = state.on;
+    requestSpacy([state.prompt, r.optText]);
     var $ = function (id) { return document.getElementById(id); };
     if (!$('opt-stats')) return;
 
-    $('in-tok').textContent = '≈' + r.orig + ' tok';
+    $('in-tok').textContent = r.ap + r.orig + ' tok';
+    $('tok-hint').textContent = exact()
+      ? 'Counts use the ' + model().name + ' tokenizer (' + model().tokenizer + '), run in your browser. Your prompt never leaves your browser.'
+      : 'Counts are estimated with a heuristic until the ' + model().name + ' tokenizer loads' + (tok.status === 'error' ? ' (it failed to load, so estimates are shown)' : '') + '. Your prompt never leaves your browser.';
     $('tech-count').textContent = r.activeCount + ' of ' + TECHS.length + ' applied';
 
     $('opt-techs').innerHTML = TECHS.map(function (t, i) {
@@ -417,10 +557,10 @@
     }).join('');
 
     $('opt-stats').innerHTML =
-      stat('Original input', '≈' + r.orig, 'tok') +
-      stat('Optimized input', '≈' + r.after, 'tok') +
-      stat('Reduction', r.pct.toFixed(1) + '%', '−' + r.saved + ' tok', '', true) +
-      stat('Est. savings / day', '$' + r.savedDay.toFixed(2), '', fmt(state.qpd) + ' queries at $' + Number(state.price).toFixed(2) + ' / 1M tok');
+      stat('Original input', r.ap + r.orig, 'tok', spacySub(state.prompt)) +
+      stat('Optimized input', r.ap + r.after, 'tok', spacySub(r.optText)) +
+      stat('Reduction', r.pct.toFixed(1) + '%', '−' + r.saved + ' tok', spacyReduction(state.prompt, r.optText), true) +
+      stat('Est. savings / day', '$' + r.savedDay.toFixed(2), '', fmt(state.qpd) + ' queries at ' + priceFmt(state.price) + ' / 1M tok');
 
     $('opt-band').innerHTML =
       '<div class="panel-head">' + panelTitle(ICON.target, 'Target band · 30–50% input reduction') +
@@ -441,7 +581,7 @@
       });
     });
     $('opt-opt').innerHTML = hasText ? '<span class="seg-keep">' + optHtml + '</span>' : '<span class="sec-empty">Enter a prompt on the left to see the optimized version here.</span>';
-    $('opt-tok').textContent = '≈' + r.after + ' tok';
+    $('opt-tok').textContent = r.ap + r.after + ' tok';
     $('diff-btn').setAttribute('aria-pressed', String(diff));
     $('opt-legend').hidden = !diff;
 
@@ -450,7 +590,7 @@
       if (!s) {
         var pot = r.potential[t.id];
         return '<div class="step off"><div class="step-head"><span class="step-num">' + (i + 1) + '</span><span class="step-name">' + esc(t.name) + '</span>' +
-          '<span class="mono-sm">skipped</span></div><div class="step-note">' + (pot > 0 ? 'Not applied · could save ≈' + pot + ' tok' : 'Not applied · nothing to change in this prompt') + '</div></div>';
+          '<span class="mono-sm">skipped</span></div><div class="step-note">' + (pot > 0 ? 'Not applied · could save ' + r.ap + pot + ' tok' : 'Not applied · nothing to change in this prompt') + '</div></div>';
       }
       var chips = s.changes.slice(0, 6).map(function (c) {
         if (t.id === 'whitespace') return '<span class="chip seg-cut">' + esc(showWs(c.from)) + '</span>';
@@ -470,10 +610,9 @@
     var r = compute();
     var routed = state.stage >= 6;
     return header({ title: 'Overview', lede: 'End-to-end view of query #Q-0001 as it moves through the governed gateway.' }) +
-      pipeline() +
       '<section class="stats">' +
         stat('Stages complete', Math.min(state.stage, STAGES.length) + ' / ' + STAGES.length, '') +
-        stat('Input tokens', '≈' + r.after, 'tok', 'from ≈' + r.orig + ' original') +
+        stat('Input tokens', r.ap + r.after, 'tok', 'from ' + r.ap + r.orig + ' original · ' + model().name) +
         stat('Reduction', r.pct.toFixed(1) + '%', '', r.status.label, true) +
         stat('Est. savings / day', '$' + r.savedDay.toFixed(2), '', fmt(state.qpd) + ' queries / day') +
       '</section>' +
@@ -491,9 +630,7 @@
           }).join('') + '</div>' +
         '</section>' +
       '</div>' +
-      (routed ? '<section class="panel panel-fill">' + panelTitle(ICON.chat, 'Response (sample)') +
-        '<p class="quote">Yes — water damage from a sudden burst pipe is covered under your home policy (§4.2) up to the dwelling limit, less your deductible. To file a claim, submit it within 60 days of the loss and include photos and a repair estimate.</p></section>'
-        : '');
+      (routed ? responsePanel() : '');
   };
 
   views.risk = function () {
@@ -504,9 +641,7 @@
       ['Legal advice request', 'Query asks about coverage, not legal interpretation.', 'Pass'],
       ['Account change request', 'No account changes requested; no escalation needed.', 'Pass']
     ];
-    return header({ title: 'Risk screening', lede: 'Every query is screened against the policy profile before any tokens are optimized or sent to a model.',
-      actions: '<a class="btn btn-primary" href="#optimizer">Go to token optimizer' + ICON.arrow + '</a>' }) +
-      pipeline() +
+    return header({ title: 'Risk screening', lede: 'Every query is screened against the policy profile before any tokens are optimized or sent to a model.' }) +
       '<section class="stats">' + stat('Checks run', checks.length, '') + stat('Passed', checks.length, '', '', true) + stat('Blocked', 0, '') + stat('Screen latency', '13', 'ms') + '</section>' +
       '<section class="panel">' + '<div class="panel-head">' + panelTitle(ICON.shield, 'Screening results (sample)') + '<span class="pill st-in">Passed</span></div>' +
         '<div class="rows">' + checks.map(function (c) {
@@ -518,7 +653,6 @@
     var r = compute();
     if (state.stage < 3) {
       return header({ title: 'Semantic cache', lede: 'Looks up semantically similar answered queries so repeat questions skip the model entirely.' }) +
-        pipeline() +
         '<div class="empty">Waiting on the token optimizer.<br>Finish optimizing the prompt to run a cache lookup.<br><br><a class="btn btn-primary" href="#optimizer">Back to token optimizer' + ICON.arrow + '</a></div>';
     }
     var hits = [
@@ -527,10 +661,8 @@
       ['Is flood damage covered under my home policy?', 0.71, 'Flood ≠ sudden pipe burst'],
       ['How long do I have to file a home claim?', 0.64, 'Partial overlap']
     ];
-    return header({ title: 'Semantic cache', lede: 'Looks up semantically similar answered queries so repeat questions skip the model entirely.',
-      actions: '<button type="button" class="btn btn-primary" data-act="continue-route">Continue to model routing' + ICON.arrow + '</button>' }) +
-      pipeline() +
-      '<section class="stats">' + stat('Lookup key', '≈' + r.after, 'tok') + stat('Best similarity', '0.89', '') + stat('Hit threshold', '0.92', '') + stat('Result', 'Miss', '', 'Query forwarded to routing', true) + '</section>' +
+    return header({ title: 'Semantic cache', lede: 'Looks up semantically similar answered queries so repeat questions skip the model entirely.' }) +
+      '<section class="stats">' + stat('Lookup key', r.ap + r.after, 'tok') + stat('Best similarity', '0.89', '') + stat('Hit threshold', '0.92', '') + stat('Result', 'Miss', '', 'Query forwarded to routing', true) + '</section>' +
       '<section class="panel"><div class="panel-head">' + panelTitle(ICON.db, 'Nearest cached queries (sample)') + '<span class="pill st-low">Below threshold</span></div>' +
         '<div class="rows">' + hits.map(function (h) {
           return '<div class="row"><div class="row-main"><span class="row-title">' + esc(h[0]) + '</span><span class="row-sub">' + esc(h[2]) + '</span></div>' +
@@ -542,7 +674,6 @@
     var r = compute();
     if (state.stage < 4) {
       return header({ title: 'Model routing', lede: 'Chooses the cheapest model tier that meets the query’s quality and compliance requirements.' }) +
-        pipeline() +
         '<div class="empty">Waiting on the cache lookup.<br>Routing runs after a cache miss.<br><br><a class="btn btn-primary" href="#cache">Go to semantic cache' + ICON.arrow + '</a></div>';
     }
     var tiers = [
@@ -550,14 +681,12 @@
       { name: 'Medium · balanced', mult: 1, note: 'Meets grounding and citation requirements', pick: true },
       { name: 'Large · reasoning', mult: 5, note: 'Not needed: no multi-document reasoning', pick: false }
     ];
-    return header({ title: 'Model routing', lede: 'Chooses the cheapest model tier that meets the query’s quality and compliance requirements.',
-      actions: state.stage < 5 ? '<button type="button" class="btn btn-primary" data-act="respond">Send to model' + ICON.arrow + '</button>' : '<a class="btn btn-ghost" href="#overview">View response</a>' }) +
-      pipeline() +
-      '<section class="panel"><div class="panel-head">' + panelTitle(ICON.route, 'Candidate tiers') + '<span class="mono-sm">≈' + r.after + ' input tok</span></div>' +
+    return header({ title: 'Model routing', lede: 'Chooses the cheapest model tier that meets the query’s quality and compliance requirements.' }) +
+      '<section class="panel"><div class="panel-head">' + panelTitle(ICON.route, 'Candidate tiers') + '<span class="mono-sm">' + r.ap + r.after + ' input tok</span></div>' +
         '<div class="rows">' + tiers.map(function (t) {
           var price = state.price * t.mult;
           var cost = r.after / 1e6 * price;
-          return '<div class="row"><div class="row-main"><span class="row-title">' + esc(t.name) + '</span><span class="row-sub">' + esc(t.note) + ' · $' + price.toFixed(2) + ' / 1M tok</span></div>' +
+          return '<div class="row"><div class="row-main"><span class="row-title">' + esc(t.name) + '</span><span class="row-sub">' + esc(t.note) + ' · ' + priceFmt(price) + ' / 1M tok</span></div>' +
             '<span class="mono-sm">' + money(cost) + ' / query</span>' +
             '<span class="pill ' + (t.pick ? 'st-in' : 'st-wait') + '">' + (t.pick ? 'Selected' : 'Skipped') + '</span></div>';
         }).join('') + '</div></section>' +
@@ -565,7 +694,8 @@
         stat('Cost / query (optimized)', money(r.after / 1e6 * state.price), '') +
         stat('Cost / query (original)', money(r.orig / 1e6 * state.price), '') +
         stat('Saved / day', '$' + r.savedDay.toFixed(2), '', '', true) +
-      '</section>';
+      '</section>' +
+      (state.stage >= 6 ? responsePanel() : '');
   };
 
   views.audit = function () {
@@ -579,7 +709,6 @@
     if (state.stage >= 6) rows.push({ t: '14:02:08.512', op: 'respond.complete', v: '200', cls: 'seg-keep' });
     return header({ title: 'Audit log', lede: 'Every gateway decision for query #Q-0001, in order. Entries update as you change optimizer techniques.',
       actions: '<button type="button" class="btn btn-ghost" data-act="copy-log">' + ICON.copy + 'Copy log</button>' }) +
-      pipeline() +
       '<section class="panel">' + panelTitle(ICON.term, 'Events · ' + rows.length) + logBlock(rows) + '</section>';
   };
 
@@ -587,22 +716,49 @@
   var view = document.getElementById('view');
   function route() {
     var r = (location.hash || '').slice(1);
-    return views[r] ? r : 'optimizer';
+    return views[r] ? r : 'overview';
   }
   function render() {
     var r = route();
     view.innerHTML = views[r]();
     if (r === 'optimizer') updateOptimizer();
-    document.querySelectorAll('.nav a').forEach(function (a) {
-      var on = a.dataset.route === r;
-      a.classList.toggle('on', on);
-      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-    });
+    renderSteps(r);
     document.title = (document.querySelector('h1') || {}).textContent + ' · Prompt Gateway';
+  }
+  // Timeline nodes up to the furthest step reached are links; later ones stay locked until
+  // the user gets there with Next.
+  var timelineEl = document.getElementById('timeline'), stepbarEl = document.getElementById('stepbar');
+  function renderSteps(r) {
+    var cur = stepIndex(r);
+    timelineEl.innerHTML = STEPS.map(function (s, i) {
+      var cls = i === cur ? 'cur' : i <= state.step ? 'done' : 'locked';
+      var dot = '<span class="tl-dot">' + (cls === 'done' ? ICON.tick : i + 1) + '</span><span class="tl-label">' + esc(s.label) + '</span>';
+      return '<li class="' + cls + '">' + (cls === 'locked'
+        ? '<span class="tl-node" aria-disabled="true">' + dot + '</span>'
+        : '<a class="tl-node" href="#' + s.route + '"' + (cls === 'cur' ? ' aria-current="step"' : '') + '>' + dot + '</a>') + '</li>';
+    }).join('');
+
+    var next = STEPS[cur + 1], nextBtn;
+    if (r === 'routing' && state.stage >= 4 && state.stage < 6) nextBtn = '<button type="button" class="btn btn-primary" data-act="respond">Send to model' + ICON.arrow + '</button>';
+    else if (next) nextBtn = '<button type="button" class="btn btn-primary" data-act="next">Next: ' + esc(next.label) + ICON.arrow + '</button>';
+    else nextBtn = '<a class="btn btn-primary" href="#overview">Back to overview</a>';
+    stepbarEl.innerHTML = '<div class="stepbar-in"><span class="stepbar-pos">Step ' + (cur + 1) + ' of ' + STEPS.length + ' · ' + esc(STEPS[cur].label) + '</span>' +
+      '<div class="stepbar-btns">' + (cur > 0 ? '<a class="btn btn-ghost" href="#' + STEPS[cur - 1].route + '">Back</a>' : '') + nextBtn + '</div></div>';
+  }
+  function goNext() {
+    var cur = stepIndex(route()), next = STEPS[cur + 1];
+    if (!next) return;
+    // Moving forward also advances the query through the gateway stages each page gates on.
+    if (next.route === 'cache') state.stage = Math.max(state.stage, 3);
+    if (next.route === 'routing') state.stage = Math.max(state.stage, 4);
+    state.step = Math.max(state.step, cur + 1);
+    persist();
+    location.hash = next.route;
   }
   function refresh() {
     persist();
     if (route() === 'optimizer') updateOptimizer(); else render();
+    syncModelUi();
   }
   var toastEl = document.getElementById('toast'), toastT;
   function toast(msg) {
@@ -628,6 +784,12 @@
     refresh();
   }
 
+  stepbarEl.addEventListener('click', function (e) {
+    var act = e.target.closest('[data-act]');
+    if (!act) return;
+    if (act.dataset.act === 'next') goNext();
+    else if (act.dataset.act === 'respond') { state.stage = Math.max(state.stage, 6); persist(); render(); toast('Response delivered'); }
+  });
   view.addEventListener('click', function (e) {
     var tb = e.target.closest('[data-tech]');
     if (tb) {
@@ -648,9 +810,6 @@
       case 'diff': state.showDiff = !state.showDiff; refresh(); break;
       case 'sample': setPrompt(SAMPLE); break;
       case 'clear': setPrompt(''); var ta = document.getElementById('prompt-in'); if (ta) ta.focus(); break;
-      case 'continue-cache': state.stage = Math.max(state.stage, 3); persist(); location.hash = 'cache'; break;
-      case 'continue-route': state.stage = Math.max(state.stage, 4); persist(); location.hash = 'routing'; break;
-      case 'respond': state.stage = Math.max(state.stage, 6); persist(); location.hash = 'overview'; toast('Response delivered'); break;
       case 'copy': copy(compute().optText, 'Optimized prompt copied'); break;
       case 'copy-log': copy(Array.prototype.map.call(view.querySelectorAll('.log div'), function (d) { return d.innerText.replace(/\n/g, '  '); }).join('\n'), 'Audit log copied'); break;
     }
@@ -665,10 +824,33 @@
     var v = parseFloat(el.value);
     return isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
   }
-  priceEl.addEventListener('input', function () { state.price = readNum(priceEl, 0.1, 30, state.price); refresh(); });
+  priceEl.addEventListener('input', function () { state.price = readNum(priceEl, 0.01, 30, state.price); refresh(); });
   qpdEl.addEventListener('input', function () { state.qpd = Math.round(readNum(qpdEl, 100, 1000000, state.qpd)); refresh(); });
   [priceEl, qpdEl].forEach(function (el) { el.addEventListener('blur', function () { priceEl.value = state.price; qpdEl.value = state.qpd; }); });
 
-  window.addEventListener('hashchange', function () { render(); window.scrollTo(0, 0); });
+  // Model picker: switching models swaps the tokenizer and, where the provider lists one, the price.
+  view.addEventListener('change', function (e) {
+    if (e.target.id !== 'model') return;
+    var m = MODEL_BY_ID[e.target.value];
+    state.model = m.id;
+    if (m.price != null) { state.price = m.price; priceEl.value = m.price; }
+    loadTokenizer();
+    refresh();
+  });
+  function syncModelUi() {
+    var m = model(), meta = document.getElementById('model-meta'), st = document.getElementById('tok-status');
+    document.querySelectorAll('[data-tok-label]').forEach(function (el) { el.textContent = tokLabel(); });
+    if (!meta) return;
+    meta.textContent = m.provider + ' · ' +
+      (m.price != null ? priceFmt(m.price) + ' in / ' + priceFmt(m.priceOut) + ' out per 1M' : 'free tier, no list price · costs use the $ / 1M above');
+    st.textContent = tok.status === 'ready' ? 'Tokenizer ready · exact counts'
+      : tok.status === 'loading' ? 'Loading tokenizer…'
+      : 'Tokenizer failed to load · using estimates';
+    st.className = 'tok-note tok-' + tok.status;
+  }
+
+  window.addEventListener('hashchange', function () { render(); syncModelUi(); window.scrollTo(0, 0); });
+  loadTokenizer();
   render();
+  syncModelUi();
 })();
