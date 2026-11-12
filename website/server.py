@@ -56,7 +56,7 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(SITE_DIR)))
-    print(f"Prompt Gateway running at http://localhost:{port}/#optimizer  (Ctrl+C to stop)", flush=True)
+    print(f"Prompt Gateway running at http://localhost:{port}/  (Ctrl+C to stop)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
