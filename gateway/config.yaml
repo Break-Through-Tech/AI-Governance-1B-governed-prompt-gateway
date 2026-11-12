@@ -37,7 +37,18 @@ cache:                        # owner: Vanessa
   backend: stub               # stub (exact match, in memory) | semantic (toxicity-detection-api/cache.py)
   min_similarity: 0.90
 
-routing:                      # owner: TBD
+routing:                      # owner: Naivy
+  intent_min_tier:            # labels must match what classify_intent returns 
+    general: Small            # TO DO: change to the correct labels
+    faq: Small
+    billing: Small
+    claims: Medium
+    policy_question: Medium
+    complex_reasoning: Large
+    unknown: Medium
+
+  unknown_intent_tier: Medium 
+
   default_model: gpt-oss-120b
   max_model_fallbacks: 2      # model failures allowed before the query fails
   tier_order: [Small, Medium, Large]

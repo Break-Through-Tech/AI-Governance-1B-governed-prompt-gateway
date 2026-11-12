@@ -1,4 +1,4 @@
-"""Node 7: route_model. Owner: TBD.
+"""Node 7: route_model. Owner: Naivy.
 
 STUB: always starts from routing.default_model. The real version should pick the cheapest tier
 that fits the intent's complexity and the risk score. Keep the fallback behaviour: never pick a
@@ -12,17 +12,20 @@ def _models():
     return {m["id"]: m for m in settings.get("routing")["models"]}
 
 
-def pick_model(start_id: str, failed: list[str]) -> dict:
-    """The start model, or if it failed, the next model in the same tier, then tiers above it."""
+def pick_model(minimum_tier: str, failed: list[str]) -> dict:
+    """Choose the cheapest availabel model in the lowest qualifying tier"""
     cfg = settings.get("routing")
-    models = _models()
     tiers = cfg["tier_order"]
-    start_tier = tiers.index(models[start_id]["tier"])
-    candidates = [models[start_id]] + [m for m in cfg["models"] if m["id"] != start_id]
+    
+    #finds where to begin
+    start_tier = tiers.index(minimum_tier) 
+    
     for tier in tiers[start_tier:]:
-        for m in candidates:
-            if m["tier"] == tier and m["id"] not in failed:
-                return m
+        candidates = [model for model in cfg["models"] if model["tier"] == tier and model["id"] not in failed ]
+        
+        if candidates:
+            return min(candidates, key=lambda model: model.get("price", cfg["default_price_per_1m_input"],),)
+
     raise RuntimeError(f"no models left to try (failed: {failed})")
 
 
@@ -37,18 +40,25 @@ def _fallback(state):
     return {"model_id": model["id"], "model_tier": model["tier"],
             "cost_estimate": estimate_cost(model, state.get("model_input_tokens", 0))}
 
+def minimum_tier_for_intent(intent: str) -> str:
+    cfg = settings.get("routing")
+    return cfg["intent_min_tier"].get(intent, cfg["unknown_intent_tier"],)
 
 @safe_node("route_model", fallback=_fallback)
 def route_model(state):
     failed = state.get("failed_models", [])
-    model = pick_model(settings.get("routing")["default_model"], failed)
+    intent = state.get("intent", "unknown")
+    minimum_tier = minimum_tier_for_intent(intent)
+    model = pick_model(minimum_tier, failed)
     tokens = state.get("model_input_tokens", state.get("original_tokens", 0))
     cost = estimate_cost(model, tokens)
-    reason = "STUB: default model" if not failed else f"fallback after failures: {failed}"
+    reason = (f"intent '{intent}' requires at least {minimum_tier}; " f"selected cheapest availabel model in {model['tier']}")
+    if failed:
+        reason += f"; excluded failed models: {failed}"
     return {
         "model_id": model["id"],
         "model_tier": model["tier"],
         "cost_estimate": cost,
-        "decision_log": [decision(model["id"], reason, tier=model["tier"], input_tokens=tokens,
+        "decision_log": [decision(model["id"], reason, intent=intent, minimum_tier=minimum_tier,tier=model["tier"], input_tokens=tokens,
                                   cost_estimate=cost)],
     }

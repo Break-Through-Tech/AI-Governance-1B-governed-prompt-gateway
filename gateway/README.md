@@ -79,7 +79,7 @@ prompt continues to the cache. See §6.)
 | 4 | `optimize_prompt` | Token optimizer | `original_prompt`, `optimizer_mode` | `optimized_prompt`, `optimized_tokens`, `techniques_applied`, `optimization_attempts` | **Riya Zingade** |
 | 5 | `verify_fidelity` | Token optimizer | `original_prompt`, `optimized_prompt` | `fidelity_score`, `fidelity_passed`, `fidelity_checks`, `optimizer_mode`, `prompt_for_model`, `model_input_tokens` | **Riya Zingade** |
 | 6 | `cache_lookup` | Semantic cache | `prompt_for_model` | `cache_hit`, `cache_similarity`, `response` (on hit) | Vanessa (wraps `toxicity-detection-api/cache.py`) |
-| 7 | `route_model` | Model routing | `intent`, `risk_score`, `model_input_tokens`, `failed_models` | `model_id`, `model_tier`, `cost_estimate` | _TBD_ |
+| 7 | `route_model` | Model routing | `intent`, `risk_score`, `model_input_tokens`, `failed_models` | `model_id`, `model_tier`, `cost_estimate` | Naivy |
 | 8 | `generate_response` | Overview | `prompt_for_model`, `model_id` | `response`, `output_tokens`, `generation_error`, `failed_models` | _TBD_ |
 | 9 | `cache_store` | Semantic cache | `prompt_for_model`, `response` | _(writes to the cache store, not state)_ | Vanessa |
 | 10 | `finalize_audit` | Audit log | everything | `final_status`, `total_cost`, `tokens_saved`, `latency_ms` | _TBD_ (integration owner) |
