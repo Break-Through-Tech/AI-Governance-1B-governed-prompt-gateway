@@ -8,14 +8,30 @@ lazily. Set cache.backend to "semantic" in config.yaml once it's wired in.
 The cache only ever sees prompts that passed risk screening (the graph runs it after screen_risk),
 so a cached safe answer is never served to an unsafe prompt.
 """
+import importlib.util
+from pathlib import Path
+
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
 
 _STORE: dict[str, str] = {}
+_SEMANTIC = None
 
 
 def _key(prompt: str) -> str:
     return " ".join(prompt.lower().split())
+
+
+def _get_semantic():
+    """Create the SemanticCache on first use, so the encoder doesn't load at import time."""
+    global _SEMANTIC
+    if _SEMANTIC is None:
+        path = Path(__file__).resolve().parents[2] / "toxicity-detection-api" / "cache.py"
+        spec = importlib.util.spec_from_file_location("semantic_cache_impl", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _SEMANTIC = module.SemanticCache(threshold=settings.get("cache")["min_similarity"])
+    return _SEMANTIC
 
 
 def clear():
@@ -25,8 +41,9 @@ def clear():
 
 def _check_backend():
     backend = settings.get("cache")["backend"]
-    if backend != "stub":
-        raise NotImplementedError(f"cache backend {backend!r} is not wired in yet")
+    if backend not in ("stub", "semantic"):
+        raise NotImplementedError(f"cache backend {backend!r} is not supported")
+    return backend
 
 
 # Fail open: a broken cache only costs money, so treat it as a miss.
@@ -43,9 +60,17 @@ def cache_lookup(state):
 
 @safe_node("cache_store", fallback=lambda s: {})
 def cache_store(state):
-    _check_backend()
+    backend = _check_backend()
     if state.get("generation_error") or state.get("risk_label") != "safe" or not state.get("response"):
         return {"decision_log": [decision("skipped", "only successful, safe responses are cached")]}
-    _STORE[_key(state["prompt_for_model"])] = state["response"]
-    return {"decision_log": [decision("stored", "STUB: saved response for exact-match reuse",
-                                      cache_size=len(_STORE))]}
+    prompt = state["prompt_for_model"]
+    if backend == "semantic":
+        cache = _get_semantic()
+        cache.store(prompt, state["response"])
+        size = len(cache.results)
+        reason = "saved response in the semantic cache"
+    else:
+        _STORE[_key(prompt)] = state["response"]
+        size = len(_STORE)
+        reason = "STUB: saved response for exact-match reuse"
+    return {"decision_log": [decision("stored", reason, cache_size=size, backend=backend)]}
