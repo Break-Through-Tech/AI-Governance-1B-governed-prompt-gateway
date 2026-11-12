@@ -7,3 +7,6 @@ pytest>=9.0
 #   optimizer.token_counter: spacy                    -> spacy>=3.8,<3.9 (already in the root requirements.txt)
 #   optimizer.token_counter: hf:<repo>                -> tokenizers
 #   optimizer.fidelity.similarity_backend: embedding  -> sentence-transformers
+
+faiss-cpu
+sentence-transformers
