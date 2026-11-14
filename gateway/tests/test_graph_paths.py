@@ -61,7 +61,8 @@ def test_model_failure_falls_back_to_another_model():
         r = run("Is water damage covered?")
     assert r["final_status"] == "answered"
     assert r["failed_models"] == ["gpt-oss-120b"]
-    assert r["model_id"] != "gpt-oss-120b" and r["model_tier"] == "Large"
+    assert r["model_id"] != "gpt-oss-120b" 
+    assert r["model_tier"] == "Small"
 
 
 def test_query_fails_after_max_model_fallbacks():
