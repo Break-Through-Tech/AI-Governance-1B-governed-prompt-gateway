@@ -2,7 +2,130 @@
 # nothing below is hardcoded in code. Each owner edits only their own section.
 
 intent:                       # owner: TBD
-  default_intent: general
+  backend: lexical            # finetuned (torch + transformers) | embedding (sentence-transformers) | lexical (none)
+  finetuned_model: YOUR-HF-USERNAME/customer-intent-roberta   # set by "training scripts/train_intent.py"
+  finetuned_max_length: 64
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  min_confidence: 0.40        # best match below this -> intent "unknown" (tune on held-out data;
+                              #   embedding scores run higher than lexical ones, so retune on switching)
+  # PLACEHOLDER labels and examples, written by hand so the gateway runs before the scripts do.
+  # "training scripts/build_intent_labels.py" replaces this whole list with the 23 labels built from
+  # Bitext Insurance + Retail Banking. Used by the embedding / lexical backends (the baseline).
+  intents:
+    insurance.claims.coverage_question:
+      examples:
+        - Is water damage from a burst pipe covered by my policy?
+        - Does my homeowners insurance cover hail damage to the roof?
+        - Am I covered if my car is stolen?
+        - Would my policy pay for a tree falling on my house?
+        - Is flood damage included in my coverage?
+        - Does my plan cover a rental car while mine is being repaired?
+        - Are my belongings covered if they are stolen from my car?
+        - Will insurance cover mold in my basement?
+    insurance.claims.file_claim:
+      examples:
+        - How do I file a claim?
+        - What do I need to submit a claim for my car accident?
+        - I want to start a claim for storm damage.
+        - What documents do I need to make a claim?
+        - How long do I have to report a loss?
+        - Can I file a claim online?
+        - Someone hit my car, how do I report it?
+        - What is the process for opening a new claim?
+    insurance.claims.status:
+      examples:
+        - What is the status of my claim?
+        - When will my claim be paid?
+        - Has my claim been approved yet?
+        - It has been two weeks, any update on my claim?
+        - Why was my claim denied?
+        - Who is the adjuster assigned to my claim?
+        - When will the adjuster contact me?
+        - Can I appeal a denied claim?
+    insurance.billing.payment:
+      examples:
+        - How do I pay my premium?
+        - When is my next payment due?
+        - Can I set up autopay?
+        - What payment methods do you accept?
+        - How much is my monthly bill?
+        - I missed a payment, what happens now?
+        - Can I pay my bill with a credit card?
+        - How do I change my payment date?
+    insurance.billing.dispute:
+      examples:
+        - I was charged twice this month.
+        - Why did my premium go up?
+        - There is a charge on my bill I don't recognize.
+        - I want a refund for an overpayment.
+        - My bill is higher than my quote.
+        - Why was I charged a late fee?
+        - When will I get my refund after cancelling?
+        - The amount you billed me is wrong.
+    insurance.policy.question:
+      examples:
+        - What is my deductible?
+        - What are the limits on my policy?
+        - When does my policy renew?
+        - Where can I find my policy documents?
+        - What does the Plus rider include?
+        - Can I get a copy of my insurance card?
+        - What is the difference between comprehensive and collision?
+        - Who is listed as a driver on my policy?
+    insurance.policy.change:
+      examples:
+        - How do I update my mailing address?
+        - I want to add a new driver to my auto policy.
+        - Can I change my deductible?
+        - I need to remove a car from my policy.
+        - How do I change my beneficiary?
+        - I want to cancel my policy.
+        - Can I add roadside assistance to my plan?
+        - I moved, how do I update my address on my policy?
+    insurance.quote.new_policy:
+      examples:
+        - Can I get a quote for car insurance?
+        - How much would renters insurance cost?
+        - I want to buy a new home insurance policy.
+        - Do you offer life insurance?
+        - Can I bundle home and auto for a discount?
+        - What discounts are available for new customers?
+        - I'm shopping for a new policy for my business.
+        - How much would it cost to insure a second car?
+    support.contact:
+      examples:
+        - What are your customer service hours?
+        - How can I contact customer support?
+        - What is your phone number?
+        - Can I speak to a human agent?
+        - Where is your nearest office?
+        - Do you have a mobile app?
+        - What languages do you support?
+        - How do I give feedback about your service?
+    banking.card.manage:
+      examples:
+        - How do I activate my new debit card?
+        - I need to block my card, I think it was stolen.
+        - Can I use my card abroad?
+        - Please cancel my credit card.
+    banking.transfer:
+      examples:
+        - How do I send money to another account?
+        - I want to make a wire transfer.
+        - Can I cancel a transfer I just made?
+        - Transfer 200 dollars to my savings account.
+    banking.loan.apply:
+      examples:
+        - How do I apply for a personal loan?
+        - I want to apply for a mortgage.
+        - What do I need to get a car loan?
+        - Can I apply for a home loan online?
+    banking.locations:
+      examples:
+        - Where is the nearest ATM?
+        - Find a branch near me.
+        - Is there a branch open on Saturday?
+        - Where can I withdraw cash nearby?
 
 risk:                         # owner: Juee / Daniel
   block_threshold: 0.80       # risk_score >= this  -> unsafe (blocked)
