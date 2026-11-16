@@ -1,31 +1,28 @@
-"""classify_intent (node 1): question extraction, labels, the unknown threshold and both backends.
+"""classify_intent (node 1): question extraction, labels, "unknown", the threshold and the log entry.
 
-The label tests read the intents from config.yaml, so they keep passing when the label set changes
-(e.g. after rebuilding it from Bitext with "training scripts/build_intent_labels.py").
+These tests check node 1's logic, not the model's accuracy (that comes from the training script's
+report), so they use a fake model instead of downloading the real one. conftest.py installs a
+default fake for every test; the tests here swap in their own with `fake_model(...)`.
 """
 from unittest.mock import patch
-
-import numpy as np
-import pytest
 
 from gateway import settings
 from gateway.graph import SAMPLE_PROMPT, run
 from gateway.nodes import intent as intent_node
 from gateway.nodes.intent import UNKNOWN, classify_intent, extract_question
 
-INTENTS = settings.get("intent")["intents"]
-
-
-@pytest.fixture(autouse=True)
-def lexical_backend():
-    """These tests check node 1's logic, not a model's accuracy, so they use the dependency-free
-    backend whatever config.yaml says. (Accuracy comes from the training scripts' reports.)"""
-    with settings.override({"intent": {"backend": "lexical", "min_confidence": 0.40}}):
-        yield
-
 
 def classify(text):
     return classify_intent({"original_prompt": text})
+
+
+def fake_model(probs: dict, seen: list | None = None):
+    """Stands in for _finetuned: a model that always answers with these probabilities."""
+    def predict(texts):
+        if seen is not None:
+            seen.extend(texts)
+        return [list(probs.values())], list(probs)
+    return patch.object(intent_node, "_finetuned", return_value=predict)
 
 
 def test_extracts_question_after_header():
@@ -38,120 +35,68 @@ def test_no_header_uses_whole_prompt():
     assert extract_question("  How do I pay my bill?  ") == "How do I pay my bill?"
 
 
-def test_every_intent_has_examples():
-    assert len(INTENTS) >= 2
-    for name, spec in INTENTS.items():
-        assert len(spec["examples"]) >= 3, name
+def test_only_the_question_reaches_the_model():
+    seen = []
+    with fake_model({"banking.password": 0.9, UNKNOWN: 0.1}, seen):
+        classify("### Policy context\nlots of text\n\n### Question\nI forgot my password")
+    assert seen == ["I forgot my password"]
 
 
-@pytest.mark.parametrize("name", list(INTENTS))
-def test_each_intents_own_example_maps_back_to_it(name):
-    # A config example should be its own best match. If this fails, two intents share an example
-    # or are too similar to tell apart.
-    out = classify(INTENTS[name]["examples"][0])
-    assert out["intent"] == name
-    assert 0.0 < out["intent_confidence"] <= 1.0
+def test_picks_the_most_likely_label():
+    with fake_model({"insurance.claims.file_claim": 0.85, "insurance.claims.status": 0.1, UNKNOWN: 0.05}):
+        out = classify("How do I file a claim?")
+    assert out["intent"] == "insurance.claims.file_claim"
+    assert out["intent_confidence"] == 0.85
+    assert out["original_tokens"] > 0
 
 
-@pytest.mark.parametrize("text", ["write me a poem about the ocean", "asdf qwer", ""])
-def test_off_topic_is_unknown(text):
-    out = classify(text)
-    assert out["intent"] == UNKNOWN
-    assert out["intent_confidence"] < settings.get("intent")["min_confidence"]
-
-
-def test_decision_log_explains_the_choice():
-    name = next(iter(INTENTS))
-    entry = classify(INTENTS[name]["examples"][0])["decision_log"][0]
-    assert entry["decision"] == name
-    assert {"backend", "intent_confidence", "runner_up", "runner_up_confidence"} <= set(entry["metrics"])
-
-
-def test_threshold_comes_from_config():
-    example = next(iter(INTENTS.values()))["examples"][0]
-    with settings.override({"intent": {"min_confidence": 1.01}}):
-        assert classify(example)["intent"] == UNKNOWN
-
-
-TINY_INTENTS = {
-    "billing.payment": {"examples": ["How do I pay my bill?", "Pay my premium"]},
-    "account.access": {"examples": ["I forgot my password", "Reset my password"]},
-}
-
-
-class FakeEncoder:
-    """Stands in for sentence-transformers: one dimension per word in a tiny vocabulary."""
-    VOCAB = ["pay", "password"]
-
-    def encode(self, texts, normalize_embeddings=True):
-        rows = []
-        for t in texts:
-            v = np.array([float(w in t.lower()) for w in self.VOCAB]) + 1e-6
-            rows.append(v / np.linalg.norm(v))
-        return np.vstack(rows)
-
-
-def test_embedding_backend_loads_lazily_and_scores():
-    # Scored directly with TINY_INTENTS: settings.override merges dicts, so it can't remove the
-    # config's own intents.
-    intent_node._encoder.cache_clear()
-    intent_node._example_matrix.cache_clear()
-    with patch.object(intent_node, "_encoder", return_value=FakeEncoder()) as enc:
-        scores = intent_node._embedding_scores("help, I lost my password", TINY_INTENTS, "fake-model")
-    assert enc.called
-    assert max(scores, key=scores.get) == "account.access"
-    assert set(scores) == set(TINY_INTENTS)
-
-
-def test_embedding_backend_is_used_by_the_node():
-    intent_node._encoder.cache_clear()
-    intent_node._example_matrix.cache_clear()
-    with settings.override({"intent": {"backend": "embedding"}}), \
-         patch.object(intent_node, "_encoder", return_value=FakeEncoder()):
-        out = classify("How do I pay my bill?")
-    assert out["decision_log"][0]["metrics"]["backend"] == "embedding"
-    assert not out.get("errors")
-
-
-def test_finetuned_backend_uses_model_probabilities():
-    calls = []
-
-    def fake_predict(texts):
-        calls.append(texts)
-        return np.array([[0.1, 0.9]]), ["billing.payment", "account.access"]
-
-    intent_node._finetuned.cache_clear()
-    with settings.override({"intent": {"backend": "finetuned", "min_confidence": 0.5}}), \
-         patch.object(intent_node, "_finetuned", return_value=fake_predict) as loader:
-        out = classify("### Question\nI lost my password")
-    assert loader.call_args.args == (settings.get("intent")["finetuned_model"],
-                                     settings.get("intent")["finetuned_max_length"])
-    assert calls == [["I lost my password"]]              # only the question reaches the model
-    assert out["intent"] == "account.access" and out["intent_confidence"] == 0.9
-    with settings.override({"intent": {"backend": "finetuned", "min_confidence": 0.95}}), \
-         patch.object(intent_node, "_finetuned", return_value=fake_predict):
-        assert classify("I lost my password")["intent"] == UNKNOWN
-
-
-def test_finetuned_unknown_class_wins_even_when_confident():
-    def fake_predict(texts):
-        return np.array([[0.05, 0.92, 0.03]]), ["banking.transfer", UNKNOWN, "insurance.claims.status"]
-
-    with settings.override({"intent": {"backend": "finetuned", "min_confidence": 0.5}}), \
-         patch.object(intent_node, "_finetuned", return_value=fake_predict):
+def test_model_choosing_unknown_gives_unknown():
+    with fake_model({"banking.transfer": 0.05, UNKNOWN: 0.92, "insurance.claims.status": 0.03}):
         out = classify("What's the weather in Paris tomorrow?")
     assert out["intent"] == UNKNOWN and out["intent_confidence"] == 0.92
     assert "model predicted unknown" in out["decision_log"][0]["reason"]
 
 
-def test_unknown_backend_fails_into_the_fallback():
-    with settings.override({"intent": {"backend": "nope"}}):
-        out = classify("How do I pay my bill?")
+def test_low_confidence_gives_unknown():
+    with settings.override({"intent": {"min_confidence": 0.5}}), \
+         fake_model({"banking.fees": 0.4, "banking.card.manage": 0.35, UNKNOWN: 0.25}):
+        out = classify("hmm what about that thing")
+    assert out["intent"] == UNKNOWN
+    assert "min_confidence" in out["decision_log"][0]["reason"]
+
+
+def test_threshold_comes_from_config():
+    probs = {"banking.fees": 0.7, UNKNOWN: 0.3}
+    with settings.override({"intent": {"min_confidence": 0.6}}), fake_model(probs):
+        assert classify("What are your fees?")["intent"] == "banking.fees"
+    with settings.override({"intent": {"min_confidence": 0.8}}), fake_model(probs):
+        assert classify("What are your fees?")["intent"] == UNKNOWN
+
+
+def test_model_name_and_length_come_from_config():
+    with fake_model({"banking.fees": 0.9, UNKNOWN: 0.1}) as loader:
+        classify("What are your fees?")
+    cfg = settings.get("intent")
+    assert loader.call_args.args == (cfg["finetuned_model"], cfg["finetuned_max_length"])
+
+
+def test_decision_log_explains_the_choice():
+    with fake_model({"insurance.claims.file_claim": 0.8, "insurance.claims.status": 0.15, UNKNOWN: 0.05}):
+        entry = classify("How do I file a claim?")["decision_log"][0]
+    assert entry["node"] == "classify_intent"
+    assert entry["decision"] == "insurance.claims.file_claim"
+    assert entry["metrics"]["runner_up"] == "insurance.claims.status"
+    assert {"intent_confidence", "runner_up_confidence"} <= set(entry["metrics"])
+
+
+def test_model_that_cannot_load_falls_back_to_unknown():
+    with patch.object(intent_node, "_finetuned", side_effect=OSError("model not found")):
+        out = classify("How do I file a claim?")
     assert out["intent"] == UNKNOWN and out["errors"]
 
 
 def test_full_graph_carries_the_intent():
-    name, spec = next(iter(INTENTS.items()))
-    r = run(spec["examples"][0])
-    assert r["intent"] == name
+    with fake_model({"banking.password": 0.95, UNKNOWN: 0.05}):
+        r = run("How do I reset my password?")
+    assert r["intent"] == "banking.password"
     assert r["decision_log"][0]["node"] == "classify_intent"
