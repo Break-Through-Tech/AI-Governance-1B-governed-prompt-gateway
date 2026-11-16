@@ -6,10 +6,20 @@ default fake for every test; the tests here swap in their own with `fake_model(.
 """
 from unittest.mock import patch
 
+import pytest
+
 from gateway import settings
 from gateway.graph import SAMPLE_PROMPT, run
 from gateway.nodes import intent as intent_node
 from gateway.nodes.intent import UNKNOWN, classify_intent, extract_question
+
+
+@pytest.fixture(autouse=True)
+def fixed_threshold():
+    """The training script sets min_confidence from the data (e.g. 0.825), so these tests pin their
+    own value and don't break when it changes. Tests about the threshold override it again."""
+    with settings.override({"intent": {"min_confidence": 0.5}}):
+        yield
 
 
 def classify(text):
