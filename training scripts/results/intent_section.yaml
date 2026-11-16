@@ -1,0 +1,604 @@
+intent:                       # owner: TBD
+  # Built by "training scripts/build_intent_labels.py": labels and examples from Bitext Insurance + Retail
+  # Banking (synthetic, CDLA-Sharing 1.0); min_confidence tuned with clinc/clinc_oos (CC BY 3.0).
+  # Edit GROUPS in that script and rerun, rather than editing this section by hand.
+  backend: embedding
+  finetuned_model: YOUR-HF-USERNAME/customer-intent-roberta
+  finetuned_max_length: 64
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  min_confidence: 0.475
+  intents:
+    insurance.claims.coverage_question:
+      bitext_intents:
+      - insurance/check_coverage
+      examples:
+      - I'd like to see the coverage of my pet insurance policy, help me
+      - I'd like to check the fucking coverage of my life insurance policy how to do it
+      - where can i check te coverage of my health insurance policy
+      - I would like to know more about my coverage, will you find some information?
+      - I'd like to check my coveraeg, will you help me?
+      - I have to check the coverage of my insurance policy, where do I do it?
+      - I would like to know about the coverage of my health insurance policy, where can I find more information?
+      - where could I get information about the coverage of my health insurance policy?
+      - I am looking for information about my fucking coevrage
+      - I'd like to know about my fucking coverage, will you give me some information?
+      - need to see the fucking coverage of my life insurance policy help me
+      - could i check the fucking coverage of my life insurance policy
+      - I'd like to know about my coverage how could i find more information
+      - I have to see the coverage of my auto insurance policy, how to do it ?
+      - I'd like to check the coverage of my pet insurance policy, will you help me?
+      - I'd like to know more about the coverage of my health insurance policy, find some information
+      - how do i check the fucking coverage of my insurance policy
+      - i have to see the fucking coverage of my poet insurance policy where to do it
+      - I have to see the coveeage of my home insurance policy, can I get some help?
+      - I'd like to check the coverage of my auto insurance policy, how could I do it?
+    insurance.claims.file_claim:
+      bitext_intents:
+      - insurance/file_claim
+      - insurance/report_incident
+      examples:
+      - i need assistance reporting a fucking incident
+      - I have to file a claim, how to ddo it?
+      - I'd like to inform of incidents how can i do it
+      - I'd an incident, I need help notifying it
+      - I need assistance submitting some fucknig home insurance
+      - I had a fucking incident, I would like to inform of it
+      - i got to file a fucking pet insurance claim where to do it
+      - need to submit some fucking claims how could i do it
+      - wanna inform of fucking incidents will ya help me
+      - I want to report a fucking incident, wher can I do it?
+      - id like to notify fucking incidents can i get some help
+      - I had an incident , notify it
+      - I have to make some fucking auto insuracne, help me
+      - I have to inform of incidents, could you help me?
+      - can yaa help me to inform of fucking incidents
+      - I want tol submit a fucking auto insurance claim, how can I do it?
+      - how to file an fucking life insurance claim
+      - I'd like to make a pet insurance claim i need assistance
+      - help me tomake some travel insurance
+      - wanna file some fucking pet insurance where could i do it
+    insurance.claims.status:
+      bitext_intents:
+      - insurance/track_claim
+      - insurance/receive_payment
+      examples:
+      - wanna receive a fycking payment i need assistance
+      - I would like to receive a fucking compensation, could I get some help?
+      - how much would I be paid for fucking damaged items?
+      - I would like to receive a payment, can you help me?
+      - I need to check the fucking status of my auto insurance claim , how can I do it?
+      - I got to monitor an insurance claim, how can I do it?
+      - I need to receive compensations, can you help me ?
+      - id like to receive fucing payments how to do it
+      - I need to recive a fucking compensation, how do I do it?
+      - I'd like to monitor a fucking insurance claim, help me
+      - where can i monitor an insurance claim
+      - i have to receive fucking payments i need assistance
+      - cqn you help me receive fucking compensations?
+      - need to receive fucking payments could uhelp me
+      - I want to know about the fucking status of my auto insurance claim , will you give me some information?
+      - i got to track fucking insurance claims
+      - id like to know more about the fucking status of my home insuranceclaim find some information
+      - where could I fid information about the status of my pet insurance claim?
+      - i have to track a claim i need asistance
+      - I'd like to track an fucking claim, where to do it?
+    insurance.claims.settlement:
+      bitext_intents:
+      - insurance/accept_settlement
+      - insurance/negotiate_settlement
+      - insurance/reject_settlement
+      - insurance/appeal_denied_insurance_claim
+      examples:
+      - I would like to reject fucking settlements, where can I do it?
+      - i have to negotiate fucking offers i need help
+      - need t dispute a fucking denied home insurance claim
+      - I'd like to reject a settlement how do i do it
+      - id like to reject a fuckingsettlement can ya help me
+      - I'd like to cacept settlement offers
+      - could you help me to negotiate a settlement?
+      - I don't find it a fair settlement, could you help me reecting it?
+      - i dont think the settlement offer is fair i need help to reject it
+      - I want to accepr a fucking offer, help me
+      - I got to challenge some fucking denied pet insurance claims
+      - I need to challenge some denied health insurance claims, could you help me?
+      - need to dispute a fucking denied health insurance claim where do i do it
+      - I need to negotiate a fucking settlement, could I get soem help?
+      - I would like to negotiate a fucking settlement , how to do it?
+      - could I negotiate a fucking offer ?
+      - I'd like to accept fucking offers can i get some help
+      - could you help me appealing some denied insurance claims?
+      - I would like to accept fucking settlements, how could I do it?
+      - I want to accept settlement offers, how to do it ?
+    insurance.policy.question:
+      bitext_intents:
+      - insurance/information_auto_insurance
+      - insurance/information_home_insurance
+      - insurance/information_health_insurance
+      - insurance/information_life_insurance
+      - insurance/information_pet_insurance
+      - insurance/information_travel_insurance
+      examples:
+      - I have to check my pet insurance , I need assistance
+      - wanna check my pet insurance i neerd assistance
+      - I want to see my life insurance, how could I do it?
+      - tell me about my fucking tavel insurance
+      - I'd like information aboutmy travel insurance, how can I find it?
+      - i need information about my home insurance where could i get it
+      - id like to know about my fucking pet insurance could ufind some information
+      - id like to know about my life insurance where do i get more information
+      - I got to se my life insurance, help me
+      - I have to see my fucking auto insurance, can you help me?
+      - I'd like to see my travel insurance where to do it
+      - I'd like information about my auto insurance how can i get it
+      - im looking for information aboug my fucking travel insurance can uhelp me
+      - I'd like to check my home insuracne where to do it
+      - I'd like to know more abot my home insurance give me some information
+      - I'd like to check my fucking home insurance howcan i do it
+      - I haveto see my fucking auto insurance, where could I do it?
+      - id like information about my auto insurance how can i find it
+      - I'd like to know more about my life insurance, could you give me some information?
+      - I have to see my health insurance
+    insurance.policy.change:
+      bitext_intents:
+      - insurance/change_coverage
+      - insurance/upgrade_coverage
+      - insurance/downgrade_coverage
+      - insurance/change_personal_details
+      - insurance/renew_insurance_policy
+      examples:
+      - I want to modify the fucking coverage of my pet insurance policy, how can I do it?
+      - I have to modify the eprsonal on my auto insurance policy, where do I do it?
+      - I have to reduce the coverage of my pet insurance policy, will you hel me?
+      - I got to extend my fucking pet insurance policy, where tgo do it?
+      - can you help me changing the fucking personal information on my life insurance policy?
+      - I got to increase the coverage of my auto insurance policy, how do I do it?
+      - I have to modify the fucking coverage of my insurance policy
+      - can uhelp me downgrading thecoverage of my travel insurance policy
+      - i have to renew my life insurance policy can ya help me
+      - I have to modify the coverage of my auto insurance policy, how can I do it?
+      - is it possible to reduce the fucking coverage of my insurance policy ?
+      - I'd like to renew my pet insurance policy, hpw to do it?
+      - I want to change the personal information on my auto insurance policy, will you help me?
+      - can you help me renewing my life insurance policy?
+      - I want to downgrade my coverage, where could Ido it?
+      - I want to modify the fucking coverage of my health insurance policy, I need assistance
+      - i have to increase my coverage can uhelp me
+      - would it be possible to increase the coverage of my health nisurance policy?
+      - where to upgrade my fucking coverage
+      - could I modify the personal on my pet insurance policy?
+    insurance.policy.cancel:
+      bitext_intents:
+      - insurance/cancel_insurance_policy
+      - insurance/cancellation_fees
+      examples:
+      - i have to check the early termination fees can uhelp me
+      - I'd like to cancel mypet insurance policy, where could I do it?
+      - wanna know more about the early termination charges could ufind some informatio
+      - i have to see the cancellation fees can uhelp me
+      - where can I get information about the early termination charges?
+      - i odnt wanna renew my fucking pet insurance policy i need assistance to cancel it
+      - I have to cancel my fucking insurance policy, I need assistance
+      - I would like to cancel my fucking auto insurance policy, help me
+      - I'd like to check the fucking early termination charges how can i do it
+      - wanna know about the fujcking cancellation charges could ugive me some information
+      - i cannot pay for my travel insurance oplicy can uhelp me cancel it
+      - I want assistance cancelling my fucking insurance policy
+      - i do not want my auto insurance policy to be renewed help me cancelling it
+      - need tto check the fucking cancellation fees help me
+      - I need to hceck the fucking early termination fees, can I get some help?
+      - I would like to know about the fucking cancellation fees, will you give me some information?
+      - I do not want my fucking pet insurance policy, help me to cancel it
+      - I do not want my fucking insurance policy, I need assistance canceling it
+      - id like to cancel my fucking health insurance policy help me
+      - I need to check the fucking early termination charges, how to do it?
+    insurance.quote.new_policy:
+      bitext_intents:
+      - insurance/buy_insurance_policy
+      - insurance/compare_insurance_policies
+      - insurance/calculate_insurance_quote
+      - insurance/check_rates
+      examples:
+      - I'm trying to find a fucking insurance quote i need help
+      - i have to buy a life insurance policy how could i do it
+      - I am looking for a fucking home insurance policy, where can I find it ?
+      - i hsve to see the different health insurance policies i need assistance
+      - I would like to check the life insurance rates
+      - I ened help purchasing an auto insurance policy
+      - could ya help me to compare fucking travel insurance policies
+      - how could i find information about the diferent health insurance policies
+      - I have to purchase a fucking auto insurance policylife insurance policy, how can Ido it?
+      - I'd like to purchase a health insurance policy, will you help me?
+      - i need a travel insurance quote could i estimate it
+      - id like to know about hte home insurance rates
+      - how could I compare pet insurance policies ?
+      - I need the fucking health insurance rates, where could I check them?
+      - I'd like to know about the home insurance rates , can you find some information?
+      - id like to know more about the fucking different travel insurance policies could ugive me some information
+      - need to edtimate a fucking travel insurance quote
+      - I want to know about the home insurance rates, how could I get more information?
+      - I would like to calculate a fucking health insurance quote, could I get some help?
+      - I'm trying to find a travel insurance quote, will you help me?
+    insurance.billing.payment:
+      bitext_intents:
+      - insurance/pay
+      - insurance/payment_methods
+      - insurance/check_payments
+      - insurance/schedule_payments
+      examples:
+      - need to see my payments to the health insurance company help me
+      - I got to schedule the fucking payments, will you help me?
+      - i got to check my fucking payments were can i do it
+      - i got to make a transfer i need asskstance
+      - i have to check my payments to the health insurance company could i get some help
+      - need to schedule the payments where to do it
+      - I want to see my payments to the life insurance company, how do I do it?
+      - I'd like to see my payments to the auto insurance company, could you help me?
+      - I want to schedule the payments , I need help
+      - could I schedule the fucking payments ?
+      - id like to maked a transfer
+      - I'd like to make fucking transfers where do i do it
+      - I have to make a fucking payment , how could I do it?
+      - I want assitsance to make fucking transfers
+      - I want to schedule the payments , how could I do it?
+      - I want to pay with a fucking credit card, how to do it ?
+      - i have to pay by debit card how to do it
+      - need to pay by card where do i do it
+      - can ya help me to see ur payment options
+      - I have to pay by credit card, help me
+    insurance.billing.dispute:
+      bitext_intents:
+      - insurance/dispute_invoice
+      - insurance/report_payment_issue
+      examples:
+      - I'd like to appesl some fucking bills help me
+      - i got to solve a fucking payment issue can ya hep me
+      - I'd a fucking problem pzying with my debit card, help me to notify of it
+      - I do not recognize fucking charges on my invoice , can you help me to dispute them?
+      - I didn't get a payment validation, where could I notify of a payment issue?
+      - I don't recognize fucking charges on my invoice, help me appealing thme
+      - I'd like to appeal some fucking invoices, I need assistance
+      - there are charges on my bill that I don't recognize, could I dispute them?
+      - I didn't get a payment confirmation, were do I report fucking payment issues?
+      - I got to appeal some bills, where could I do it ?
+      - I want to dispute some bills, I need help
+      - I cannot make payments, how can I report a fucking payment issue ?
+      - my debit card did not work can ya help me report a fucking payment problem
+      - there are fucking charges on my invoice that i dont recognize i ned help appealing them
+      - the payment didnt go through could i report a fucking payment problem
+      - the fucking charges on my invoice are not legitimate could ya help me to dispute them
+      - the charges on my invoice are not legitimate could ya help me dipsute them
+      - i cant pay can ya help me reporting payment issues
+      - I didn't get a payment validation, help me reporting fucking payment problems
+      - I can't make a payment, I want to report payment problems
+    insurance.support.complaint:
+      bitext_intents:
+      - insurance/file_complaint
+      examples:
+      - I'd like to file fucking complaints for a service how can i do it
+      - wanna make a complaint where to do it
+      - need to file a complaint how cold i do it
+      - i want help filing fucking consumer complaints
+      - I got to file a consumre complaint for a service, where to do it?
+      - i got to make a fucking complaint for a service i need help
+      - I ain't happy with the service, where can I submit a consumer complaint?
+      - im not happy with the service help me to file a fucking complaint
+      - I would like to submit a copmlaint for a service, can you help me?
+      - I am not happy with the service, I want help to file a consumer complaint
+      - I need to submit fucking consumer complaints, where to do it?
+      - I havw to file a consumer complaint for a service, where to do it?
+      - id like to make a fucking complaint for aservice where can i do it
+      - I need to file a complaint for a service, where do I do it?
+      - I am not happy with the service, help me making fucking ocmplaints
+      - i have to make consumer complints for a service could ya help me
+      - im not happy with the service can uhelp me submit a fucking complaint
+      - need to submit a consumer complaint where can i do it
+      - I'dlike to file complaints can ya help me
+      - where can I submit an complaint for a service?
+    insurance.support.info:
+      bitext_intents:
+      - insurance/general_information
+      - insurance/schedule_appointment
+      examples:
+      - I would like to know more about your insurances, will you give me some information?
+      - help me schedule an appointment with an professional
+      - I'd like to know about ur personal data protection policy where do i find more informatoin
+      - I'd like to set up an appointment how do i do it
+      - where could I find information about your insurances?
+      - I need infomation about your insurances, how could I get it?
+      - need to schedule a fucking appointment how can i do it
+      - I want to know about your personal data protection policy, where could I find moer information?
+      - where can i ifnd information about ur fucking insurances
+      - id like to schedule a fucking appointment could uhelp me
+      - I want information about your fucking personal data protection policy, where can I get it?
+      - I need to schedule an appointment with a professional, can I get some help?
+      - I have to schedule an appointment with a professional , how to do it?
+      - I want to know more about your fucking personal data protection policy, could you find some information?
+      - wanna know about ur personal dataprotection policy
+      - i have to set up an appointment
+      - wanna know about ur fucking insurances how can i find more information
+      - i got to set up a fucking appointment where could i do it
+      - can ya help me set up a fucking appointment with a professional
+      - I have to schedule a fucking appointment, where to do it?
+    banking.account.open_close:
+      bitext_intents:
+      - banking/create_account
+      - banking/close_account
+      examples:
+      - I need to close an online account, could you help mer?
+      - I want to create a fucking profile , I need assistance
+      - I would like to register a fucking account, how can I do it?
+      - i dont have a fucking user account could uhelp me register it
+      - I do not have a fucking profile, I need help creating it
+      - I don't have an account, can you help me to create it?
+      - how could i create an fucking account
+      - i hve to register a profile how do i do it
+      - i have to create a fucking account where do i do it
+      - register a fucking acount
+      - I'd like to close an fucking profile, can you help me?
+      - i dont have a fucknig user account open it
+      - is it possible to cancel an account
+      - I don't use my fucking profile, can I get some help?
+      - I donm't want to keep my profile, can you help me close it?
+      - I have to close a fucking online account, where do I do it?
+      - id like to cancel a fucking online account where can i do it
+      - I don't use my user account, can you help me?
+      - i have to cancel a profile will uhelp me
+      - I need to close aq fucking profile, could you help me?
+    banking.account.balance_activity:
+      bitext_intents:
+      - banking/check_recent_transactions
+      - banking/check_current_balance_on_card
+      examples:
+      - I need to check the current balance on my credit card
+      - I got to see the current balance on my credit card, where do I do it?
+      - I would like to see te current balance of my account, can you help me?
+      - I'd like to check the current balance on my card where could i do it
+      - I have to see the fucking recent transaction details, will you help me?
+      - need to see the current balance on my cards how to do it
+      - im looking for information about the current balance on my credit cards could i get some help
+      - I need to see the fucking current balance on my card, where to do it ?
+      - I need to check the fucking recent transactions, can I get some help?
+      - I would like to know about the current balance of my account, can you give me some information ?
+      - I want to check the fucking bank statemnet, could I get some help?
+      - id like to know about the fucking current balance on my cards give me some information
+      - how can I see the fucking current balance on my credit cards?
+      - wanna know about the current balance on my credit card how can i ifnd more information
+      - I would like to see the fucking current balance on my cards, can I get some help?
+      - I have to check the <fucking> current balance of my account, how do I do it?
+      - I'd like to know about the current balance of my account, how can I get more information?
+      - is it possible to see the fucking bank stateent
+      - need to see recent transaction details where do i do it
+      - I'm looking for information about my recent transactions were could i find it
+    banking.card.manage:
+      bitext_intents:
+      - banking/activate_card
+      - banking/activate_card_international_usage
+      - banking/block_card
+      - banking/cancel_card
+      examples:
+      - where could I cancell a credit card?
+      - I'd like to camcel a card on mobile could i get some help
+      - I need to cancel a card, could I get some help?
+      - i want help caqncelling a card
+      - could ya help me cancel a credit card
+      - i have to activate a visa for international usage
+      - I'm traveling abroad, could you help me activating an Amex for international usage?
+      - igot to activate a visa online where could i do it
+      - i have to activate a credit card for international usage where to do it
+      - could i activate a visa for international usage
+      - i have to ativate a master card on mobile how could i do it
+      - im travelling abroad i nee to activate a card for international usage
+      - wanna block a master card online could ya help me
+      - i got to activate an credit card on mobile i need assistance
+      - I want to activate an Amex on mobile , how can I do it?
+      - id like to block a credit card online where to do it
+      - I cannot find my Master Card, how can I lock it?
+      - I have to activate a Master Card, how to do it?
+      - I have to block an Amex, how could I do it ?
+      - I'd like to lock an amex on mobile could uhelp me
+    banking.fees:
+      bitext_intents:
+      - banking/check_fees
+      - banking/check_card_annual_fee
+      examples:
+      - I'd like information about the fucking credit card annual fees
+      - I'd like to know about the fucking credit card annual fees how do i get more information
+      - i cant find my card annual fee could ya help me see it
+      - I can't find my fee, I need assistance seeing it
+      - i cant find my fee how can i see it
+      - I wouldlike to check my fees, could I get some help?
+      - i cannot find my asccount fees i need assistance to check them
+      - need to check the card annuals fees where could i do it
+      - I nded to check my fees, where could I do it?
+      - i want assistance seeing myfees
+      - nee to see my fees could i get some help
+      - wanna see my account fees how could i do it
+      - i want help checking the card annual fees
+      - I can't find my account fees, will you help me see them?
+      - I can't find my fucking card annua fee, will you help me to check it?
+      - I cannot find my account fees, can I see them?
+      - I want to check the card annual fee, where to do it?
+      - I would like to know about th fucking credit card annuals fees, how do I get more information?
+      - could ya help me to check the card annual fees
+      - can uhelp me to see hte card annuals fees
+    banking.atm.problem:
+      bitext_intents:
+      - banking/dispute_ATM_withdrawal
+      - banking/recover_swallowed_card
+      examples:
+      - the ATM didn't return my credit card, is it possible t recover it?
+      - wanna retrieve a swallowed card by an atm where could i do it
+      - I'd like to dispute an atm transaction where do i do it
+      - the ATM didn't return my Master Card,I need help retrieving it
+      - I want to recover a swallowed card by an ATM, will you help me?
+      - I'd like to recover an amex by an atm i nedd help
+      - i have to dispute a withdrawal i need help
+      - I'd like to dispute a transaction
+      - I have to disputea withdrawal
+      - I don't recognise an ATM withdrawal, what should I do?
+      - the atm didnt return my visa can ya retrieve it
+      - need to retrieve a credit card how do i do it
+      - I would like to get back an Amex yb an ATM
+      - i have to retreive a master card where do i do it
+      - wanna retrieve a master card by an atm help me
+      - I got to dispute an ATM transaction, how can I do it?
+      - i want help dksputing an atm withdrawal
+      - i got to dispute an atm transaction can uhelp me
+      - id like to dispute an atm withdrawal will ya help me
+      - i do not recogniuse a withdrawal what can i do
+    banking.locations:
+      bitext_intents:
+      - banking/find_ATM
+      - banking/find_branch
+      examples:
+      - where could i get infoirmation about the closest branch
+      - information about a branch in my arrea
+      - I need help finding an ATM nearby
+      - I'd like information about an atm near me where could i get it
+      - where can i get infformation about an atm
+      - I would like to know more about an ATM nearby, could you find some information?
+      - wanna search for an atm will uhelp me
+      - id like informqtion about an atm near how can i get it
+      - need to search for the nearest branch where do i do it
+      - where to search for an atm
+      - id like information about the closst atm where can i get it
+      - I want to know more about tbe closest ATM, will you find some information?
+      - I need some cash, help me search for a ATM near
+      - I need cash, how can I find a branch nearby?
+      - i need cash i want assistance to search ofr a branch in my area
+      - I would like tosearch for a branch near, how can I do it?
+      - where can I find the closest branch ?
+      - I need cash , I have to find a branch near
+      - how could i search for an branch near me
+      - I want to know about a branch nearby, were do I get more information?
+    banking.loan.apply:
+      bitext_intents:
+      - banking/apply_for_loan
+      - banking/apply_for_mortgage
+      examples:
+      - I'dlike to take out a mortgage i need help
+      - how do I apply for an mortgage?
+      - I'm looking for a loan could ya help me to findit
+      - i want help taking out a mortgae
+      - I need a mortgage, I'd like toapply for it
+      - I need a mirtgage, can you help me apply for it?
+      - I'm trying to findx a loan, help me
+      - i need a loan can utazke out it
+      - i got to take out a loan how do i do it
+      - i have ot apply for a loan help me
+      - I need aloan, will you help me applying for it?
+      - i neeed a mortgage will uhelp me to take out it
+      - can you help me to take out a mortgaeg?
+      - I need to take out a mortgage, how could I do it?
+      - i got to take out a mortgage could uhelp me
+      - I need a loan , could I take out it?
+      - I am looking for a loan, could I get some help?
+      - coulx you help me to apply for a mortgage?
+      - how can i apply for a loan
+      - I need a loan, where can I take out itg?
+    banking.loan.manage:
+      bitext_intents:
+      - banking/cancel_loan
+      - banking/cancel_mortgage
+      - banking/check_loan_payments
+      - banking/check_mortgage_payments
+      examples:
+      - ix like to cancel a loan i need help
+      - I'd like to check the loan payment, where cpuld I do it?
+      - i havw to check the loan payment where can i do it
+      - I don't want to pay for my mortgage, how could I cancel it?
+      - wanna check the mortgage payments where could i do it
+      - I'd like to check the loan payment couldi get some help
+      - need to cancel a loan cam i get some help
+      - I have ot cancel a loan, where to do it?
+      - I'd like to check the loan payment were can i do it
+      - i have to cancel a mortgagve how to do it
+      - i got to check the loan payments where do i do it
+      - I would like to see the mortgage payments, where can I do it?
+      - I got to se the mortgage payments, where could I do it?
+      - I have to see the mortgage payment, where do I do it?
+      - i have to see the mortgage payment where could i do it
+      - I do not wat to pay for my mortgage, would it be possible to cancel it?
+      - I don't want to pay for my mortgage , I need assistance to cancel it
+      - I can't pay for my loan, can you help me cncelling it?
+      - I'd like to cancel a mortgage how do i do it
+      - I want help canceling a loan
+    banking.transfer:
+      bitext_intents:
+      - banking/make_transfer
+      - banking/cancel_transfer
+      examples:
+      - I'd like to make a fucking bank transfer to someone, I need assistance
+      - i made a mistake and i transferred money to the wrong account can i cancel a transfer
+      - I want to transfer money, where to make a bank transfer to someone ?
+      - I have made a mistake, I need assistance canceling an bank transfer
+      - i made a mistake and i have transferred money to the wrong account i need assistance to cancel an bank transfer
+      - I need to make a bak transfer, can you help me?
+      - I'd like to cancel a fucking bank transfer to an contact where to do it
+      - I need to perform a bank transfer, where could I do it?
+      - I want to transfer money online, can you help me to make a bank transfer to someone?
+      - I have to perform a bank transfer to someone, were could I do it?
+      - I got to cancel a transfer, where could I do it?
+      - I got to perform a transfer to someone, how could I do it?
+      - I want to pay the rent online, help me making a bank transfer to someone
+      - id like to cancel a fucking bank transfer can i get some help
+      - I want to transfer money, where to make a transfer to someone?
+      - I want to transfer money online, how to perform a transfer?
+      - i have made a mistake i want assistance cancelling a bank transfer
+      - i made a mistakewhere could i cancel a bank transfer
+      - I made a mistake and I transferred money to the wrong account, I need asistance to cancel a transfer
+      - I made a mistake, could you help em canceling a transfer?
+    banking.password:
+      bitext_intents:
+      - banking/get_password
+      - banking/set_up_password
+      examples:
+      - I'm looking for a password how can i find it
+      - i have to set upa password i need help
+      - i got to get a password where to do it
+      - i dont have a password will ya help me to get it
+      - I do not have a password, help me get it
+      - im looking for a password i need assistance finding itg
+      - id like to get a password wqhere to do it
+      - wanna get apassword
+      - imlooking for a password i need assistance to find it
+      - could I egt a password?
+      - is it possible to get a password
+      - I am trying to find a password, can you help me?
+      - I got to set up a password, where could I do it?
+      - I want help getting a password
+      - i dont have a password how do i gt it
+      - I want to ge a password, I need assistance
+      - I'd like to set up a password, where to do it?
+      - i got to est up a password can uhelp me
+      - im looking for a password can uhelp me find it
+      - I'm looking fora password can ya help me find it
+    support.contact:
+      bitext_intents:
+      - insurance/agent
+      - insurance/customer_service
+      - insurance/human_agent
+      - insurance/insurance_representative
+      - banking/customer_service
+      - banking/human_agent
+      examples:
+      - cxould i talk to the insurer
+      - i have to speak with soebody where do i do it
+      - I want to talk to client service, I need asistance
+      - id like to speak with fucking somebody could i get some help
+      - I'd like to talk to my insurace representative could i get some help
+      - could uhelp me to contact fuckimg client service
+      - I'd like to speak with my fuckiung insurance representative, help me
+      - could uhelp me to speak with a human
+      - I have to callfucking client service, will you help me?
+      - I want to talk to a human agent, I need help
+      - I'd like to talk to my ufcking insurance representative, where to do it?
+      - I got tospeak with customer service, how to do it?
+      - how could I talk to clientr service?
+      - send an email to client service
+      - i have to speak with fucking client service
+      - can ya help me contactingf customer service
+      - i have to speak with a fucking operator how to do it
+      - I got to speak with an operator, how to do it?
+      - can I speakk with a fucking operator?
+      - I nwed assistance to speak with the insurer
