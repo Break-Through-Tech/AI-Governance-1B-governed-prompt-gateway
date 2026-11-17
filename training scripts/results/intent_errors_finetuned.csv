@@ -1,0 +1,36 @@
+instruction,true,source,original_intent,top,confidence,predicted
+need to appeal some fucking nivoices can ya help me,insurance.billing.dispute,bitext,insurance/dispute_invoice,insurance.billing.dispute,0.5070181488990784,unknown
+i got to pat how do i do it,insurance.billing.payment,bitext,insurance/pay,insurance.billing.payment,0.3970453441143036,unknown
+wanna dispute an inmvoice can i get some help,insurance.billing.dispute,bitext,insurance/dispute_invoice,banking.atm.problem,0.999333918094635,banking.atm.problem
+"I have to cneck the fucking coverage of my insurance policy, where can I do it?",insurance.claims.coverage_question,bitext,insurance/check_coverage,insurance.policy.change,0.9250445365905762,insurance.policy.change
+"I need to cancel a credit care, could I get some help?",banking.card.manage,bitext,banking/cancel_card,banking.transfer,0.9806774258613586,banking.transfer
+what hours is custmoer service available?,support.contact,bitext,banking/customer_service,insurance.support.info,0.9666635990142822,insurance.support.info
+is there any operator available,support.contact,bitext,banking/human_agent,unknown,0.9996650218963623,unknown
+wanna see the ratrs how could i do it,insurance.quote.new_policy,bitext,insurance/check_rates,banking.account.balance_activity,0.6210156083106995,unknown
+i want help making a transfer,banking.transfer,bitext,banking/make_transfer,insurance.billing.payment,0.9458756446838379,insurance.billing.payment
+do i have overdraft protection,unknown,clinc_oos,oos,insurance.support.info,0.9696487784385681,insurance.support.info
+how can i get a better rate on my card,unknown,clinc_oos,oos,insurance.quote.new_policy,0.9270523190498352,insurance.quote.new_policy
+how much over will overdraft protection cover,unknown,clinc_oos,oos,insurance.support.info,0.988644003868103,insurance.support.info
+how do i add someone to my account,unknown,clinc_oos,oos,banking.account.open_close,0.9997392296791077,banking.account.open_close
+i would like to upgrade to full coverage for my car,unknown,clinc_oos,oos,insurance.policy.change,0.999839186668396,insurance.policy.change
+tell me about personal finance,unknown,clinc_oos,oos,insurance.support.info,0.9493544697761536,insurance.support.info
+please activate a wireless hotspot so i can use the internet,unknown,clinc_oos,oos,banking.card.manage,0.9998375177383423,banking.card.manage
+what are the best personal finance practices,unknown,clinc_oos,oos,insurance.support.info,0.9976770281791687,insurance.support.info
+how can i get help for my mental health,unknown,clinc_oos,oos,insurance.policy.question,0.862225353717804,insurance.policy.question
+i'd like to renew my subscription to playboy,unknown,clinc_oos,oos,insurance.policy.change,0.8483731746673584,insurance.policy.change
+when do i have to get the mmr,unknown,clinc_oos,oos,banking.atm.problem,0.9249072074890137,banking.atm.problem
+can the nsa crack the encryption on my iphone,unknown,clinc_oos,oos,banking.password,0.9624389410018921,banking.password
+make an ad to sell my real estate,unknown,clinc_oos,oos,banking.loan.apply,0.8905592560768127,banking.loan.apply
+tell me how i can file a pleading in circuit court,unknown,clinc_oos,oos,insurance.claims.settlement,0.9945789575576782,insurance.claims.settlement
+can i get a sear's appliance repairman,unknown,clinc_oos,oos,support.contact,0.9543707966804504,support.contact
+find a credit mentoring service number for me please,unknown,clinc_oos,oos,support.contact,0.9996001124382019,support.contact
+"i have too many credit cards, is there any way you can help me organize them",unknown,clinc_oos,oos,banking.card.manage,0.9774584174156189,banking.card.manage
+find a credit counseling service for me on the web,unknown,clinc_oos,oos,support.contact,0.8943014144897461,support.contact
+explain how to reduce my debt burden,unknown,clinc_oos,oos,banking.loan.manage,0.9935101866722107,banking.loan.manage
+look up student loan offers on google,unknown,clinc_oos,oos,banking.loan.apply,0.9983320832252502,banking.loan.apply
+check current prime mortgage rate,unknown,clinc_oos,oos,banking.loan.apply,0.9479050636291504,banking.loan.apply
+get me a list of the best savings account rates right now,unknown,clinc_oos,oos,insurance.quote.new_policy,0.9983339905738831,insurance.quote.new_policy
+renew gym membership,unknown,clinc_oos,oos,insurance.policy.change,0.9984569549560547,insurance.policy.change
+report outage to my electric provider,unknown,clinc_oos,oos,insurance.billing.dispute,0.9992075562477112,insurance.billing.dispute
+search information on how to apply foundation,unknown,clinc_oos,oos,insurance.support.info,0.9276721477508545,insurance.support.info
+when will my payment be deposited,unknown,clinc_other_domain,payday,insurance.billing.payment,0.9993240833282471,insurance.billing.payment

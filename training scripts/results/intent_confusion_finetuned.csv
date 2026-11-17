@@ -1,0 +1,25 @@
+,insurance.claims.coverage_question,insurance.claims.file_claim,insurance.claims.status,insurance.claims.settlement,insurance.policy.question,insurance.policy.change,insurance.policy.cancel,insurance.quote.new_policy,insurance.billing.payment,insurance.billing.dispute,insurance.support.complaint,insurance.support.info,banking.account.open_close,banking.account.balance_activity,banking.card.manage,banking.fees,banking.atm.problem,banking.locations,banking.loan.apply,banking.loan.manage,banking.transfer,banking.password,support.contact,unknown
+true: insurance.claims.coverage_question,99,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.claims.file_claim,0,199,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.claims.status,0,0,198,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.claims.settlement,0,0,0,400,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.policy.question,0,0,0,0,588,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.policy.change,0,0,0,0,0,500,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.policy.cancel,0,0,0,0,0,0,200,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.quote.new_policy,0,0,0,0,0,0,0,399,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
+true: insurance.billing.payment,0,0,0,0,0,0,0,0,392,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
+true: insurance.billing.dispute,0,0,0,0,0,0,0,0,0,198,0,0,0,0,0,0,1,0,0,0,0,0,0,1
+true: insurance.support.complaint,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0
+true: insurance.support.info,0,0,0,0,0,0,0,0,0,0,0,198,0,0,0,0,0,0,0,0,0,0,0,0
+true: banking.account.open_close,0,0,0,0,0,0,0,0,0,0,0,0,200,0,0,0,0,0,0,0,0,0,0,0
+true: banking.account.balance_activity,0,0,0,0,0,0,0,0,0,0,0,0,0,199,0,0,0,0,0,0,0,0,0,0
+true: banking.card.manage,0,0,0,0,0,0,0,0,0,0,0,0,0,0,396,0,0,0,0,0,1,0,0,0
+true: banking.fees,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,193,0,0,0,0,0,0,0,0
+true: banking.atm.problem,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,197,0,0,0,0,0,0,0
+true: banking.locations,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,199,0,0,0,0,0,0
+true: banking.loan.apply,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,193,0,0,0,0,0
+true: banking.loan.manage,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,381,0,0,0,0
+true: banking.transfer,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,198,0,0,0
+true: banking.password,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,162,0,0
+true: support.contact,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,583,1
+true: unknown,0,0,0,1,1,3,0,2,1,1,0,5,1,0,2,0,1,0,3,1,0,1,3,1322
