@@ -11,7 +11,7 @@ def routing_config():
                 "general": "Small",
                 "billing": "Small", 
                 "claims": "Medium",
-                "comlex_reasoning": "Large",
+                "complex_reasoning": "Large",
                 "unknown": "Medium",
             },
             
@@ -20,7 +20,7 @@ def routing_config():
             "default_price_per_1m_input": 3.0,
             "models":[
                 {"id": "small-expensive", "tier": "Small", "price": 0.50},
-                {"id": "smlal-cheap", "tier": "Small", "price": 0.10},
+                {"id": "small-cheap", "tier": "Small", "price": 0.10},
                 {"id": "medium-model", "tier": "Medium", "price": 0.80},
                 {"id": "large-model", "tier": "Large", "price": 0.20},
                 
@@ -33,17 +33,17 @@ def routing_config():
 @pytest.mark.parametrize(
     "intent, expected_tier",
     [
-        ("genral", "Small"),
+        ("general", "Small"),
         ("billing", "Small"),
         ("claims", "Medium"),
         ("complex_reasoning", "Large"),
-        ("unkown", "Medium"),
+        ("unknown", "Medium"),
         ("unrecognized_label", "Medium"),
     ],
 )
 
 def test_intent_minimum_tier(routing_config, intent, expected_tier):
-    assert minimum_tier_for_intent(intent)
+    assert minimum_tier_for_intent(intent == expected_tier)
 
 def test_selects_cheapest_model_in_lowest_suitable_tier(routing_config):
     model = pick_model("Small", [])
