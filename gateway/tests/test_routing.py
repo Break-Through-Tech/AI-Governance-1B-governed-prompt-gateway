@@ -1,21 +1,42 @@
 import pytest
 
 from gateway import settings
-from gateway.nodes.routing import minimum_tier_for_intent, pick_model
+from gateway.nodes.routing import minimum_tier_for_intent, pick_model, minimum_tier_for_risk, route_model
 
 @pytest.fixture
 def routing_config():
     with settings.override({
         "routing": {
             "intent_min_tier":{
-                "general": "Small",
-                "billing": "Small", 
-                "claims": "Medium",
-                "complex_reasoning": "Large",
+                "insurance.claims.coverage_question": "Medium",          
+                "insurance.claims.file_claim": "Medium",
+                "insurance.claims.status": "Small",
+                "insurance.claims.settlement": "Large",
+                "insurance.policy.question": "Medium",
+                "insurance.policy.change": "Medium",
+                "insurance.policy.cancel": "Small",
+                "insurance.quote.new_policy": "Medium",
+                "insurance.billing.payment": "Small",
+                "insurance.billing.dispute": "Medium",
+                "insurance.support.complaint": "Medium",
+                "insurance.support.info": "Small",
+                # retail banking 
+                "banking.account.open_close": "Medium", 
+                "banking.account.balance_activity": "Small",
+                "banking.card.manage": "Medium",
+                "banking.fees": "Small",
+                "banking.atm.problem": "Medium",
+                "banking.locations": "Small",
+                "banking.loan.apply": "Medium",
+                "banking.loan.manage": "Medium",
+                "banking.transfer": "Small",
+                "banking.password": "Small",
+                "support.contact": "Small",
                 "unknown": "Medium",
             },
             
             "unknown_intent_tier": "Medium",
+            "default_model": "large-model",
             "tier_order": ["Small", "Medium","Large"],
             "default_price_per_1m_input": 3.0,
             "models":[
@@ -25,25 +46,89 @@ def routing_config():
                 {"id": "large-model", "tier": "Large", "price": 0.20},
                 
             ],
+            "risk_tier_rules":[
+                {"min_score": 0.0, "tier": "Small"},
+                {"min_score": 0.3, "tier": "Medium"},
+                {"min_score": 0.4, "tier": "Large"},
+            ],
             
         }
+        
     }):
         yield
         
 @pytest.mark.parametrize(
     "intent, expected_tier",
     [
-        ("general", "Small"),
-        ("billing", "Small"),
-        ("claims", "Medium"),
-        ("complex_reasoning", "Large"),
+        ("insurance.claims.coverage_question", "Medium"),          
+        ("insurance.claims.file_claim", "Medium"),
+        ("insurance.claims.status", "Small"),
+        ("insurance.claims.settlement", "Large"),
+        ("insurance.policy.question", "Medium"),
+        ("insurance.policy.change", "Medium"),
+        ("insurance.policy.cancel", "Small"),
+        ("insurance.quote.new_policy", "Medium"),
+        ("insurance.billing.payment", "Small"),
+        ("insurance.billing.dispute", "Medium"),
+        ("insurance.support.complaint", "Medium"),
+        ("insurance.support.info", "Small"),
+                        # retail banking 
+        ("banking.account.open_close", "Medium"), 
+        ("banking.account.balance_activity", "Small"),
+        ("banking.card.manage", "Medium"),
+        ("banking.fees", "Small"),
+        ("banking.atm.problem", "Medium"),
+        ("banking.locations", "Small"),
+        ("banking.loan.apply", "Medium"),
+        ("banking.loan.manage", "Medium"),
+        ("banking.transfer", "Small"),
+        ("banking.password", "Small"),
+        ("support.contact", "Small"),
         ("unknown", "Medium"),
         ("unrecognized_label", "Medium"),
     ],
 )
-
 def test_intent_minimum_tier(routing_config, intent, expected_tier):
-    assert minimum_tier_for_intent(intent == expected_tier)
+    assert minimum_tier_for_intent(intent) == expected_tier
+
+
+@pytest.mark.parametrize(
+    "score, expected_tier",
+    [
+        (0.0, "Small"),
+        (0.299, "Small"),
+        (0.3, "Medium"),
+        (0.399, "Medium"),
+        (0.4, "Large"),
+        (0.499, "Large"),
+        
+    ],
+)
+def test_risk_minimum_tier(routing_config, score, expected_tier):
+    assert minimum_tier_for_risk(score) == expected_tier
+
+@pytest.mark.parametrize(
+    "intent, score, expected_tier", 
+    [
+        ("banking.locations", 0.1, "Small"),
+        ("banking.locations", 0.3, "Medium"),
+        ("banking.locations", 0.4, "Large"),
+        ("insurance.claims.settlement", 0.1, "Large"),
+        ("unknown", 0.1, "Medium"),
+    ],
+)
+
+def test_routing_combines_intent_and_risk(routing_config, intent, score, expected_tier):
+    result = route_model({
+        "intent": intent,
+        "risk_score": score,
+        "model_input_tokens": 100,
+        "failed_models": [],
+        
+    })
+    
+    assert not result.get("errors")
+    assert result["model_tier"] == expected_tier
 
 def test_selects_cheapest_model_in_lowest_suitable_tier(routing_config):
     model = pick_model("Small", [])

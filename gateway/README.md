@@ -116,7 +116,11 @@ related pipeline steps, not tied to one person.
   computer from hackers" sits close to "how do I hack into someone's computer", so a cache placed before
   screening could hand a cached safe answer to an unsafe prompt.
 - **`route_model`**: picks the cheapest tier (Small / Medium / Large, using the model list in the UI) that
-  meets the intent's complexity and risk requirements. It skips any model in `failed_models`.
+  meets the intent's complexity and risk requirements. It skips any model in
+  `failed_models`.
+  Takes the higher of the intent-required and risk-required tiers. Mapping and
+  risk thresholds are proposed defaults awaiting team evaluation, node 2 handles
+  blocking and redirection 
 - **`generate_response`**: calls the provider (Groq / OpenRouter / Google AI Studio), or returns a simulated
   response when `config.simulate: true`, so the demo works offline.
 - **`finalize_audit`**: always the last node, no matter which path the query took. It computes the totals
@@ -295,7 +299,7 @@ gateway/
 │   ├── risk.py            ← screen_risk (STUB), handle_unsafe
 │   ├── optimizer.py       ← optimize_prompt, verify_fidelity      REAL
 │   ├── cache.py           ← cache_lookup, cache_store             STUB (exact match)
-│   ├── routing.py         ← route_model                           STUB (default model + fallback order)
+│   ├── routing.py         ← route_model                           intent/risk-based selection + model fallback
 │   ├── generate.py        ← generate_response                     SIMULATED
 │   └── audit.py           ← finalize_audit                        REAL
 └── tests/

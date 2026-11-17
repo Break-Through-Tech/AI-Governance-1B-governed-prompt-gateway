@@ -1,8 +1,10 @@
 """Node 7: route_model. Owner: Naivy.
 
-STUB: always starts from routing.default_model. The real version should pick the cheapest tier
-that fits the intent's complexity and the risk score. Keep the fallback behaviour: never pick a
-model listed in `failed_models`; try the same tier first, then the next tier up.
+Selects the lowest qualifying model tier using configured intent and risk
+requirements. Chooses the cheapest available model within that tier, excluding
+failed models, and moves to higher tiers when needed. 
+
+Cost estimates cover input tokens only 
 """
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
@@ -13,7 +15,7 @@ def _models():
 
 
 def pick_model(minimum_tier: str, failed: list[str]) -> dict:
-    """Choose the cheapest availabel model in the lowest qualifying tier"""
+    """Choose the cheapest available model in the lowest qualifying tier"""
     cfg = settings.get("routing")
     tiers = cfg["tier_order"]
     
@@ -44,21 +46,60 @@ def minimum_tier_for_intent(intent: str) -> str:
     cfg = settings.get("routing")
     return cfg["intent_min_tier"].get(intent, cfg["unknown_intent_tier"],)
 
+def minimum_tier_for_risk(risk_score: float) -> str:
+    cfg = settings.get("routing")
+    tiers = cfg["tier_order"]
+    
+    qualifying_tiers = [
+        rule["tier"]
+        for rule in cfg["risk_tier_rules"]
+        if risk_score >= rule["min_score"]
+    ]
+    
+    return max(qualifying_tiers, key=tiers.index)
+
 @safe_node("route_model", fallback=_fallback)
 def route_model(state):
     failed = state.get("failed_models", [])
     intent = state.get("intent", "unknown")
-    minimum_tier = minimum_tier_for_intent(intent)
+    
+    cfg = settings.get("routing")
+    tiers = cfg["tier_order"]
+    
+    intent_tier = minimum_tier_for_intent(intent)
+    
+    risk_score = state["risk_score"]
+    if not 0 <= risk_score <= 1:
+        raise ValueError("risks_score must be between 0 and 1")
+    risk_tier = minimum_tier_for_risk(risk_score)
+    minimum_tier = max(intent_tier, risk_tier, key=tiers.index)
+    
     model = pick_model(minimum_tier, failed)
     tokens = state.get("model_input_tokens", state.get("original_tokens", 0))
     cost = estimate_cost(model, tokens)
-    reason = (f"intent '{intent}' requires at least {minimum_tier}; " f"selected cheapest availabel model in {model['tier']}")
+    reason = (
+        f"intent '{intent}' requires at least {intent_tier}; " 
+        f"risk_score {risk_score} requires {risk_tier}; "
+        f"minimum tier {minimum_tier}; "
+        f"selected cheapest available model in {model['tier']}"
+    )
     if failed:
         reason += f"; excluded failed models: {failed}"
     return {
         "model_id": model["id"],
         "model_tier": model["tier"],
         "cost_estimate": cost,
-        "decision_log": [decision(model["id"], reason, intent=intent, minimum_tier=minimum_tier,tier=model["tier"], input_tokens=tokens,
-                                  cost_estimate=cost)],
+        "decision_log": [
+            decision(
+                model["id"], 
+                reason, 
+                intent=intent, 
+                intent_tier=intent_tier,
+                risk_score=risk_score,
+                risk_tier=risk_tier,
+                minimum_tier=minimum_tier,
+                tier=model["tier"], 
+                input_tokens=tokens,
+                cost_estimate=cost
+                )],
     }
