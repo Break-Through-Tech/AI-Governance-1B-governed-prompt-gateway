@@ -101,6 +101,7 @@ def route_model(state):
                 minimum_tier=minimum_tier,
                 tier=model["tier"], 
                 input_tokens=tokens,
-                cost_estimate=cost
+                cost_estimate=cost,
+                input_price_per_million=model.get("price"),
                 )],
     }

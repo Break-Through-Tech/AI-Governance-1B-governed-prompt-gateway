@@ -66,10 +66,12 @@ def cache_lookup(state):
     backend = _check_backend()
     if state.get("risk_label") != "safe":
         return {"cache_hit": False, "decision_log": [decision("skipped", "requires safe screening")]}
+    threshold = None
     if backend == "semantic":
+        threshold = settings.get("cache")["min_similarity"]
         prompt, scope = _semantic_query(state)
         hit, score = _get_semantic().lookup_with_score(
-            prompt, scope=scope, threshold=settings.get("cache")["min_similarity"]
+            prompt, scope=scope, threshold=threshold
         )
     else:
         hit = _STORE.get(_key(state["prompt_for_model"]))
@@ -81,7 +83,8 @@ def cache_lookup(state):
         result["response"] = hit
     outcome = "hit" if hit is not None else "miss"
     return {**result, "decision_log": [decision(
-        outcome, f"{backend} cache {outcome}", backend=backend, cache_similarity=score
+        outcome, f"{backend} cache {outcome}", backend=backend, cache_similarity=score,
+        min_similarity=threshold
     )]}
 
 

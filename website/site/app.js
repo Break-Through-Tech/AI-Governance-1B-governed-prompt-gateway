@@ -1,856 +1,314 @@
 (function () {
   'use strict';
 
-  // ---------- sample prompt ----------
-  var SAMPLE = [
-    'You are a customer service assistant for a regulated insurance provider.    You are always helpful, polite, and professional. You must always be polite and professional with customers.',
-    'Answer only using the policy context provided. Do not give legal advice. If the user requests account changes, escalate to a licensed agent.',
-    'Remember: never provide legal advice, and only answer from the provided policy context.',
-    '',
-    '',
-    '',
-    '### Policy context',
-    '- **Home §4.2:** Water damage from a sudden burst pipe is covered up to the dwelling limit, less your deductible.',
-    '- **FAQ:** To update your mailing address, sign in and open Profile settings.',
-    '- **Auto §9.4:** Roadside assistance is available on auto policies with the Plus rider.',
-    '- **Claims guide:** File within 60 days of the loss and include photos and a repair estimate.',
-    '',
-    '### Question',
-    'Um, so basically I was just wondering, if it is not too much trouble, is water damage from a burst pipe in my kitchen covered, and in order to file a claim, what do I need to do? Thanks so much in advance!!'
-  ].join('\n');
-
-  // ---------- techniques (run in this order) ----------
-  var TECHS = [
-    { id: 'whitespace', name: 'Whitespace normalization', desc: 'Collapses repeated spaces, blank lines, indentation and trailing spaces.' },
-    { id: 'formatting', name: 'Markup stripping', desc: 'Removes markdown headings, bold markers, rules and emoji.' },
-    { id: 'filler', name: 'Filler phrase removal', desc: 'Drops hedges, greetings, sign-offs and filler words.' },
-    { id: 'verbose', name: 'Concise rewriting', desc: 'Replaces wordy phrases with shorter equivalents.' },
-    { id: 'dedup', name: 'Deduplication', desc: 'Removes sentences that repeat an earlier instruction.' },
-    { id: 'prune', name: 'Context pruning', desc: 'Drops list items that share no keywords with the question.', risk: true },
-    { id: 'telegraphic', name: 'Article dropping', desc: 'Removes “a”, “an” and “the” for a terse, telegraphic style.', risk: true }
-  ];
-  var TECH_BY_ID = {};
-  TECHS.forEach(function (t) { TECH_BY_ID[t.id] = t; });
-  function preset(all) {
-    var on = {};
-    TECHS.forEach(function (t) { on[t.id] = all === true ? true : all === false ? false : !t.risk; });
-    return on;
-  }
-
-  var SPAN_RULES = {
-    whitespace: [
-      [/(?<= ) +/g, ''],
-      [/[ \t]+(?=\n)/g, ''],
-      [/(?<=\n)[ \t]+/g, ''],
-      [/(?<=\n)\n+/g, ''],
-      [/\t+/g, ' ']
-    ],
-    formatting: [
-      [/^#{1,6}[ \t]+/gm, ''],
-      [/\*\*|__/g, ''],
-      [/`+/g, ''],
-      [/^[ \t]*([-=*_])\1{2,}[ \t]*$/gm, ''],
-      [/\p{Extended_Pictographic}️?\s?/gu, ''],
-      [/[¶·]{2,}|(?:¶\s*)+/g, '']
-    ],
-    filler: [
-      [/^\s*(?:hi|hello|hey)(?: there)?[!,.]*\s*/gim, ''],
-      [/\b(?:um+|uh+|erm|hmm+)\b[,.]?\s*/gi, ''],
-      [/\bso basically,?\s*/gi, ''],
-      [/\bbasically,?\s*/gi, ''],
-      [/\bI was (?:just )?wondering,?\s*(?:if|whether)?\s*/gi, ''],
-      [/,?\s*(?:if )?(?:it is|it's) not too much trouble,?\s*/gi, ''],
-      [/\bif you don't mind,?\s*/gi, ''],
-      [/\s*\b(?:thanks|thank you)(?: so much| very much| a lot)?(?: in advance)?[!.]*/gi, ''],
-      [/\bI hope (?:this|that) makes sense[.!]*\s*/gi, ''],
-      [/\b(?:actually|literally|honestly|really|just|kindly),?\s+/gi, '']
-    ],
-    verbose: [
-      [/\bin order to\b/gi, 'to'],
-      [/\bdue to the fact that\b/gi, 'because'],
-      [/\bat this point in time\b/gi, 'now'],
-      [/\bin the event that\b/gi, 'if'],
-      [/\b(?:is|are) able to\b/gi, 'can'],
-      [/\bhas the ability to\b/gi, 'can'],
-      [/\ba large number of\b/gi, 'many'],
-      [/\bthe majority of\b/gi, 'most'],
-      [/\bwith (?:regard|respect) to\b/gi, 'about'],
-      [/\bfor the purpose of\b/gi, 'for'],
-      [/\bprior to\b/gi, 'before'],
-      [/\bmake sure that\b/gi, 'ensure'],
-      [/\bwhether or not\b/gi, 'whether'],
-      [/\beach and every\b/gi, 'every'],
-      [/\bfirst and foremost\b/gi, 'first'],
-      [/\b(?:it is important to note that|please note that|I would like you to|could you please)\s*/gi, ''],
-      [/\bwhat do I need to do\b/gi, 'what are the steps']
-    ],
-    telegraphic: [
-      [/\b(?:the|a|an)\s+(?=[A-Za-z§])/gi, '']
-    ]
-  };
-
-  var STOP = {};
-  ('a an the and or but if then so of to in on at by for with from as is are was were be been being it its this that these those ' +
-   'i me my you your we our they them their he she his her what which who how when where why do does did doing done ' +
-   'can could will would should must may might shall have has had just also only always very all any some such into about up out ' +
-   'please need want there here than too own same other more most each few both while over under again further once').split(' ')
-    .forEach(function (w) { STOP[w] = true; });
-  function stem(w) { return w.length > 4 ? w.replace(/(?:ing|ed|es|s|e|d)$/, '') : w; }
-  function keywords(text) {
-    var set = {};
-    (text.toLowerCase().match(/[a-z]+/g) || []).forEach(function (w) {
-      if (!STOP[w] && w.length > 1) set[stem(w)] = true;
-    });
-    return Object.keys(set);
-  }
-
-  var STAGES = [
-    { id: 'intent', label: 'Intent classified', route: 'overview' },
-    { id: 'risk', label: 'Risk screen passed', route: 'risk' },
-    { id: 'optimize', label: 'Optimize tokens', route: 'optimizer' },
-    { id: 'cache', label: 'Cache lookup', route: 'cache' },
-    { id: 'route', label: 'Route model', route: 'routing' },
-    { id: 'respond', label: 'Respond', route: 'overview' }
-  ];
-
-  // Pages in walk-through order; the top timeline and the Back / Next bar follow this list.
-  var STEPS = [
-    { route: 'overview', label: 'Overview' },
-    { route: 'risk', label: 'Risk screening' },
-    { route: 'optimizer', label: 'Token optimizer' },
-    { route: 'cache', label: 'Semantic cache' },
-    { route: 'routing', label: 'Model routing' },
-    { route: 'audit', label: 'Audit log' }
-  ];
-  function stepIndex(r) { for (var i = 0; i < STEPS.length; i++) if (STEPS[i].route === r) return i; return 0; }
-
-  // ---------- models ----------
-  // Open-weight models callable on a free hosted tier. Each tokenizer is the model's own,
-  // loaded from its (ungated) Hugging Face repo. Prices are $ / 1M tokens where the provider
-  // publishes one; null means free tier with no list price, so the top-bar price is kept.
-  var MODELS = [
-    { id: 'lfm-2.5-2.6b', name: 'LFM 2.5 2.6B', provider: 'OpenRouter', api: 'liquid/lfm-2.5-2.6b:free', tokenizer: 'LiquidAI/LFM2.5-2.6B', tier: 'Small' },
-    { id: 'llama-3.1-8b', name: 'Llama 3.1 8B', provider: 'Groq', api: 'llama-3.1-8b-instant', tokenizer: 'unsloth/Llama-3.1-8B-Instruct', tier: 'Small' },
-    { id: 'gpt-oss-20b', name: 'gpt-oss-20b', provider: 'Groq', api: 'openai/gpt-oss-20b', tokenizer: 'openai/gpt-oss-20b', tier: 'Small', price: 0.075, priceOut: 0.30 },
-    { id: 'gemma-4-26b', name: 'Gemma 4 26B-A4B', provider: 'OpenRouter', api: 'google/gemma-4-26b-a4b-it:free', tokenizer: 'google/gemma-4-26B-A4B-it', tier: 'Medium' },
-    { id: 'qwen3.8-27b', name: 'Qwen 3.8 27B', provider: 'Groq (preview)', api: 'qwen/qwen3.8-27b', tokenizer: 'Qwen/Qwen3.8-27B', tier: 'Medium', price: 0.80, priceOut: 4.00 },
-    { id: 'nemotron-3.5-lightning', name: 'Nemotron 3.5 Lightning 30B', provider: 'OpenRouter', api: 'nvidia/nemotron-3.5-lightning:free', tokenizer: 'nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16', tier: 'Medium' },
-    { id: 'gemma-4-31b', name: 'Gemma 4 31B', provider: 'Google AI Studio', api: 'gemma-4-31b-it', tokenizer: 'google/gemma-4-31B-it', tier: 'Medium' },
-    { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', provider: 'Groq', api: 'llama-3.3-70b-versatile', tokenizer: 'unsloth/Llama-3.3-70B-Instruct', tier: 'Large' },
-    { id: 'gpt-oss-120b', name: 'gpt-oss-120b', provider: 'Groq', api: 'openai/gpt-oss-120b', tokenizer: 'openai/gpt-oss-120b', tier: 'Large', price: 0.15, priceOut: 0.60 },
-    { id: 'nemotron-3-super', name: 'Nemotron 3 Super 120B', provider: 'OpenRouter', api: 'nvidia/nemotron-3-super-120b-a12b:free', tokenizer: 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8', tier: 'Large' }
-  ];
-  var MODEL_BY_ID = {};
-  MODELS.forEach(function (m) { MODEL_BY_ID[m.id] = m; });
-  var DEFAULT_MODEL = 'gpt-oss-120b';
-
-  // ---------- state ----------
-  var KEY = 'prompt-gateway-state-v2';
-  var state = { prompt: SAMPLE, on: preset(), lastTech: null, showDiff: true, price: 3, qpd: 50000, stage: 2, step: 0, model: null };
-  try {
-    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (saved) state = Object.assign(state, saved, { on: Object.assign(preset(), saved.on) });
-  } catch (e) { /* storage unavailable */ }
-  if (!MODEL_BY_ID[state.model]) {
-    state.model = DEFAULT_MODEL;
-    if (MODEL_BY_ID[DEFAULT_MODEL].price != null) state.price = MODEL_BY_ID[DEFAULT_MODEL].price;
-  }
-  function model() { return MODEL_BY_ID[state.model]; }
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
-
-  // ---------- token estimate ----------
-  // Heuristic stand-in for a BPE tokenizer: common words ≈ 1 token, long words split,
-  // digit runs in groups of 3, each punctuation run ≈ 1, newline runs ≈ 1.
-  function estTokens(s) {
-    var n = 0, m, re = /(\n+)|( {2,}|\t+)|([A-Za-z]+)|(\d+)|([^\sA-Za-z\d])\5*/g;
-    while ((m = re.exec(s))) {
-      if (m[3]) n += Math.ceil(m[3].length / 8);
-      else if (m[4]) n += Math.ceil(m[4].length / 3);
-      else n += 1;
-    }
-    return n;
-  }
-
-  // ---------- model tokenizers ----------
-  // The selected model's tokenizer.json is fetched from Hugging Face and run in the browser
-  // with tokenizers.js. Until it loads (or if it fails) counts fall back to estTokens.
-  var TOKENIZERS_JS = 'https://cdn.jsdelivr.net/npm/@huggingface/tokenizers@0.2.0/dist/tokenizers.min.mjs';
-  var tok = { model: null, status: 'idle', error: null };
-  var tokLoaded = {};   // model id -> Tokenizer, so switching back is instant
-  var tokLib = null;
-  var countCache = new Map();
-
-  function fetchJson(url) {
-    // Cache API keeps large tokenizer files (Gemma's is tens of MB) across visits.
-    var get = function () { return fetch(url).then(function (res) { if (!res.ok) throw new Error(res.status + ' ' + url); return res; }); };
-    var cached = null;
-    try { cached = window.caches && caches.open('hf-tokenizers'); } catch (e) {}
-    if (!cached) return get().then(function (res) { return res.json(); });
-    return cached.then(function (c) {
-      return c.match(url).then(function (hit) {
-        if (hit) return hit.json();
-        return get().then(function (res) { c.put(url, res.clone()).catch(function () {}); return res.json(); });
-      });
-    }, function () { return get().then(function (res) { return res.json(); }); });
-  }
-  function loadTokenizer() {
-    var m = model();
-    countCache.clear();
-    if (tokLoaded[m.id]) { tok = { model: m.id, status: 'ready', error: null }; return; }
-    tok = { model: m.id, status: 'loading', error: null };
-    var base = 'https://huggingface.co/' + m.tokenizer + '/resolve/main/';
-    tokLib = tokLib || import(TOKENIZERS_JS);
-    Promise.all([tokLib, fetchJson(base + 'tokenizer.json'), fetchJson(base + 'tokenizer_config.json')])
-      .then(function (r) {
-        tokLoaded[m.id] = new r[0].Tokenizer(r[1], r[2]);
-        if (tok.model === m.id) { tok.status = 'ready'; countCache.clear(); refresh(); }
-      })
-      .catch(function (e) {
-        if (String(e).indexOf(TOKENIZERS_JS) >= 0) tokLib = null;
-        if (tok.model === m.id) { tok.status = 'error'; tok.error = e; countCache.clear(); refresh(); }
-      });
-  }
-  function exact() { return tok.status === 'ready'; }
-  function countTokens(s) {
-    if (!exact()) return estTokens(s);
-    var n = countCache.get(s);
-    if (n === undefined) {
-      n = tokLoaded[tok.model].encode(s, { add_special_tokens: false }).ids.length;
-      if (countCache.size > 500) countCache.clear();
-      countCache.set(s, n);
-    }
-    return n;
-  }
-  function tokLabel() {
-    var m = model();
-    return tok.status === 'ready' ? 'Exact · ' + m.name + ' tokenizer'
-      : tok.status === 'loading' ? 'Estimated · loading ' + m.name + ' tokenizer'
-      : 'Estimated tokens';
-  }
-
-  // ---------- spaCy tokens ----------
-  // A separate, linguistic data point: spaCy splits text into words and punctuation rather than
-  // the subword pieces models bill by. Counts come from website/server.py; without it they're hidden.
-  var spacy = { available: null, name: '', counts: {}, timer: null };
-  function requestSpacy(texts) {
-    var missing = texts.filter(function (t) { return !(t in spacy.counts); });
-    if (!missing.length || spacy.available === false) return;
-    clearTimeout(spacy.timer);
-    spacy.timer = setTimeout(function () {
-      fetch('api/spacy/count', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: missing }) })
-        .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
-        .then(function (d) {
-          if (Object.keys(spacy.counts).length > 200) spacy.counts = {};
-          missing.forEach(function (t, i) { spacy.counts[t] = d.counts[i]; });
-          spacy.available = true; spacy.name = d.tokenizer;
-          refresh();
-        })
-        .catch(function () { spacy.available = false; refresh(); });
-    }, 250);
-  }
-  function spacySub(text) {
-    if (spacy.available === false) return 'spaCy · run website/server.py';
-    var n = spacy.counts[text];
-    return n == null ? 'spaCy · counting…' : 'spaCy · ' + fmt(n) + ' word tokens';
-  }
-  function spacyReduction(a, b) {
-    var x = spacy.counts[a], y = spacy.counts[b];
-    return x == null || y == null || !x ? '' : 'spaCy · −' + ((x - y) / x * 100).toFixed(1) + '% word tokens';
-  }
-
-  // ---------- optimizer engine ----------
-  // The prompt is split into units (sentences, or whole lines for list items). Each unit holds
-  // pieces tagged keep / cut / add, so every change stays traceable to the technique that made it.
-  function splitUnits(text) {
-    var units = [];
-    text.split(/(?<=\n)/).forEach(function (line) {
-      if (/^[ \t]*(?:[-*•]|\d+[.)])\s/.test(line)) { units.push({ text: line, bullet: true }); return; }
-      var start = 0, i = 0;
-      while (i < line.length) {
-        if ('.!?'.indexOf(line[i]) >= 0) {
-          var j = i;
-          while (j + 1 < line.length && '.!?'.indexOf(line[j + 1]) >= 0) j++;
-          if (j + 1 === line.length || /\s/.test(line[j + 1])) {
-            var k = j + 1;
-            while (k < line.length && /\s/.test(line[k])) k++;
-            units.push({ text: line.slice(start, k), bullet: false });
-            start = k; i = k; continue;
-          }
-          i = j + 1; continue;
-        }
-        i++;
-      }
-      if (start < line.length) units.push({ text: line.slice(start), bullet: false });
-    });
-    var merged = [];
-    units.forEach(function (u) {
-      if (!u.text.trim() && merged.length) merged[merged.length - 1].text += u.text;
-      else merged.push(u);
-    });
-    return merged.map(function (u) { return { bullet: u.bullet, pieces: [{ text: u.text, kind: 'keep' }] }; });
-  }
-  function liveText(u) {
-    return u.pieces.filter(function (p) { return p.kind === 'keep' || p.kind === 'add'; }).map(function (p) { return p.text; }).join('');
-  }
-  function matchCase(src, repl) {
-    return repl && /^[A-Z]/.test(src) ? repl[0].toUpperCase() + repl.slice(1) : repl;
-  }
-  function applySpan(units, techId, rules, changes) {
-    units.forEach(function (u) {
-      rules.forEach(function (rule) {
-        var re = rule[0], repl = rule[1], out = [];
-        u.pieces.forEach(function (p) {
-          if (p.kind !== 'keep') { out.push(p); return; }
-          var s = p.text, last = 0, m, hit = false;
-          re.lastIndex = 0;
-          while ((m = re.exec(s))) {
-            if (!m[0]) { re.lastIndex++; continue; }
-            var r = matchCase(m[0], repl);
-            if (r === m[0]) continue;
-            hit = true;
-            if (m.index > last) out.push({ text: s.slice(last, m.index), kind: 'keep' });
-            out.push({ text: m[0], kind: 'cut', tech: techId });
-            if (r) out.push({ text: r, kind: 'add', tech: techId });
-            changes.push({ from: m[0], to: r });
-            last = m.index + m[0].length;
-          }
-          if (!hit) { out.push(p); return; }
-          if (last < s.length) out.push({ text: s.slice(last), kind: 'keep' });
-        });
-        u.pieces = out;
-      });
-    });
-  }
-  function cutUnit(u, techId, changes) {
-    changes.push({ from: liveText(u).trim() });
-    var out = [];
-    u.pieces.forEach(function (p, idx) {
-      if (p.kind === 'add') { out.push({ text: p.text, kind: 'gone', tech: p.tech }); return; }
-      if (p.kind !== 'keep') { out.push(p); return; }
-      var isLast = !u.pieces.slice(idx + 1).some(function (q) { return q.kind === 'keep' || q.kind === 'add'; });
-      var nl = isLast ? (p.text.match(/\n+$/) || [''])[0] : '';
-      if (p.text.length > nl.length) out.push({ text: p.text.slice(0, p.text.length - nl.length), kind: 'cut', tech: techId });
-      if (nl) out.push({ text: nl, kind: 'keep' });
-    });
-    u.pieces = out;
-  }
-  function applyDedup(units, changes) {
-    var seen = [];
-    units.forEach(function (u) {
-      var kw = keywords(liveText(u));
-      if (kw.length < 2) return;
-      var dup = seen.some(function (prev) {
-        var overlap = kw.filter(function (w) { return prev.indexOf(w) >= 0; }).length;
-        return overlap / Math.min(kw.length, prev.length) >= 0.6 && Math.min(kw.length, prev.length) >= 3;
-      });
-      if (dup) cutUnit(u, 'dedup', changes); else seen.push(kw);
-    });
-  }
-  function applyPrune(units, changes) {
-    var q = null;
-    for (var i = units.length - 1; i >= 0; i--) { if (liveText(units[i]).indexOf('?') >= 0) { q = units[i]; break; } }
-    if (!q) for (var j = units.length - 1; j >= 0; j--) { if (liveText(units[j]).trim()) { q = units[j]; break; } }
-    if (!q) return;
-    var qk = keywords(liveText(q));
-    if (qk.length < 2) return;
-    units.forEach(function (u) {
-      if (u === q || !u.bullet || !liveText(u).trim()) return;
-      var kw = keywords(liveText(u));
-      if (!kw.some(function (w) { return qk.indexOf(w) >= 0; })) cutUnit(u, 'prune', changes);
-    });
-  }
-  function runPipeline(text, on) {
-    var units = splitUnits(text), steps = [], prev = countTokens(text);
-    TECHS.forEach(function (t) {
-      if (!on[t.id]) return;
-      var changes = [];
-      if (SPAN_RULES[t.id]) applySpan(units, t.id, SPAN_RULES[t.id], changes);
-      else if (t.id === 'dedup') applyDedup(units, changes);
-      else if (t.id === 'prune') applyPrune(units, changes);
-      var n = countTokens(units.map(liveText).join(''));
-      steps.push({ tech: t, before: prev, after: n, changes: changes });
-      prev = n;
-    });
-    return { units: units, steps: steps, after: prev, text: units.map(liveText).join('') };
-  }
-
-  var memo = { key: null, val: null };
-  function compute() {
-    var key = state.prompt + '\u0000' + JSON.stringify(state.on) + '\u0000' + state.price + '\u0000' + state.qpd + '\u0000' + state.model + '\u0000' + tok.status;
-    if (memo.key === key) return memo.val;
-    var base = runPipeline(state.prompt, state.on);
-    var orig = countTokens(state.prompt);
-    var stepById = {};
-    base.steps.forEach(function (s) { stepById[s.tech.id] = s; });
-    var potential = {};
-    TECHS.forEach(function (t) {
-      if (state.on[t.id]) return;
-      var on = Object.assign({}, state.on); on[t.id] = true;
-      potential[t.id] = base.after - runPipeline(state.prompt, on).after;
-    });
-    var saved = orig - base.after;
-    var pct = orig ? saved / orig * 100 : 0;
-    var status = !orig ? { label: 'No prompt', cls: 'st-wait' }
-      : pct < 30 ? { label: 'Below target', cls: 'st-low' }
-      : pct <= 50 ? { label: 'Within target', cls: 'st-in' }
-      : { label: 'Above target · review quality', cls: 'st-high' };
-    var log = [
-      { t: '14:02:07.118', op: 'risk_screen.pass', v: 'stage 2', cls: 'd-off' },
-      { t: '14:02:07.124', op: 'tokenize  ' + model().tokenizer, v: exact() ? 'exact' : 'estimated', cls: 'd-off' }
-    ];
-    TECHS.forEach(function (t, i) {
-      var s = stepById[t.id];
-      log.push({ t: '14:02:07.' + (131 + i * 9), op: 'optimize.' + t.id + (s ? '' : '  skipped'), v: s ? '−' + (s.before - s.after) + ' tok' : '0 tok', cls: s ? 'd-on' : 'd-off' });
-    });
-    log.push({ t: '14:02:07.211', op: 'optimize.complete  ' + orig + ' → ' + base.after, v: pct.toFixed(1) + '%', cls: 'seg-keep' });
-    memo.key = key;
-    memo.val = {
-      orig: orig, after: base.after, ap: exact() ? '' : '≈', saved: saved, pct: pct, status: status, units: base.units,
-      steps: base.steps, stepById: stepById, potential: potential, optText: base.text.trim(), log: log,
-      savedDay: saved * state.qpd / 1e6 * state.price,
-      activeCount: TECHS.filter(function (t) { return state.on[t.id]; }).length
-    };
-    return memo.val;
-  }
-
-  // ---------- helpers ----------
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-  function modelOptions() {
-    return ['Small', 'Medium', 'Large'].map(function (tier) {
-      return '<optgroup label="' + tier + '">' + MODELS.filter(function (m) { return m.tier === tier; }).map(function (m) {
-        return '<option value="' + m.id + '"' + (m.id === state.model ? ' selected' : '') + '>' + esc(m.name) + ' · ' + esc(m.provider) + '</option>';
-      }).join('') + '</optgroup>';
-    }).join('');
-  }
-  function priceFmt(v) { v = Number(v); return '$' + (v < 0.1 ? v.toFixed(3) : v.toFixed(2)); }
-  function money(v) { return '$' + v.toFixed(v < 1 ? 4 : 2); }
-  function fmt(n) { return Number(n).toLocaleString('en-US'); }
-  function showWs(s) { return s.replace(/ /g, '·').replace(/\t/g, '→').replace(/\n/g, '↵\n'); }
-  function snippet(s) { s = s.replace(/\s+/g, ' ').trim(); return s.length > 60 ? s.slice(0, 57) + '…' : s; }
-  var ICON = {
+  const ICON = {
     chev: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
-    check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9FD9B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
     tick: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
     arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>',
-    reset: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
-    target: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
     doc: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
-    pen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     compress: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>',
     copy: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
-    sliders: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/></svg>',
-    steps: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4v-4h4v-4h4V8h4"/></svg>',
     term: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>',
-    warn: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><path d="M12 18h.01"/></svg>',
     shield: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>',
     db: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="2.5"/><path d="M4 5.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/><path d="M4 11.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/></svg>',
     route: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h8"/></svg>',
     chat: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>'
   };
 
-  // ---------- shared fragments ----------
-  function header(o) {
-    return '<header class="head"><div class="head-text">' +
-      '<div class="crumbs"><span>Pipeline</span>' + ICON.chev + '<span>Query #Q-0001</span><span class="tag" data-tok-label>' + esc(tokLabel()) + '</span></div>' +
-      '<h1>' + esc(o.title) + '</h1><p class="lede">' + esc(o.lede) + '</p></div>' +
-      (o.actions ? '<div class="actions">' + o.actions + '</div>' : '') + '</header>';
+  const steps = [
+    ['overview', 'Overview'], ['risk', 'Risk screening'], ['optimizer', 'Token optimizer'],
+    ['cache', 'Semantic cache'], ['routing', 'Model routing'], ['audit', 'Audit log']
+  ];
+  const view = document.getElementById('view');
+  const timeline = document.getElementById('timeline');
+  const stepbar = document.getElementById('stepbar');
+  let phase = 'idle';
+  let result = null;
+
+  function escape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
   }
-  function stat(label, val, unit, sub, accent) {
-    return '<div class="stat"><span class="stat-label">' + esc(label) + '</span>' +
-      '<span class="stat-val' + (accent ? ' accent' : '') + '">' + val + (unit ? '<small>' + unit + '</small>' : '') + '</span>' +
-      (sub ? '<span class="stat-sub">' + sub + '</span>' : '') + '</div>';
+
+  const number = value => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 4 }) : 'N/A';
+  const money = value => Number.isFinite(value) ? '$' + value.toFixed(6) : 'N/A';
+  const reduction = (original, revised) => original > 0 && Number.isFinite(revised)
+    ? (100 * (original - revised) / original).toFixed(1) + '%' : 'N/A';
+  const entries = node => result.decision_log.filter(entry => entry.node === node);
+  const latest = node => entries(node).at(-1);
+  const failed = entry => ['error', 'error_fallback'].includes(entry?.decision);
+
+  function stat(label, value, sub = '') {
+    return `<div class="stat"><span class="stat-label">${escape(label)}</span>
+      <span class="stat-val">${escape(value)}</span>
+      ${sub ? `<span class="stat-sub">${escape(sub)}</span>` : ''}</div>`;
   }
-  function logBlock(rows) {
-    return '<div class="log">' + rows.map(function (r) {
-      return '<div><span class="ts">' + esc(r.t) + '</span><span class="op">' + esc(r.op) + '</span><span class="' + r.cls + '">' + esc(r.v) + '</span></div>';
-    }).join('') + '</div>';
+
+  function panel(icon, title, content) {
+    return `<section class="panel panel-fill"><div class="title">${ICON[icon]}<h2>${escape(title)}</h2></div>${content}</section>`;
   }
+
+  function row(title, detail = '', status = '') {
+    const tone = statusTone(status);
+    return `<div class="row"><div class="row-main"><span class="row-title">${escape(title)}</span>
+      ${detail ? `<span class="row-sub">${escape(detail)}</span>` : ''}</div>
+      ${status ? `<span class="pill ${tone}">${escape(status)}</span>` : ''}</div>`;
+  }
+
+  const quote = value => `<p class="quote">${escape(value ?? 'N/A')}</p>`;
+  const empty = message => `<p class="empty">${escape(message)}</p>`;
+  const stats = (...cards) => `<section class="stats">${cards.join('')}</section>`;
+  const rows = items => `<div class="rows">${items.join('')}</div>`;
+
+  function statusTone(status) {
+    if (['Completed', 'Live success', 'Cache hit'].includes(status)) return 'st-in';
+    if (['Failed', 'Blocked'].includes(status)) return 'st-low';
+    if (['Simulated', 'Redirected'].includes(status)) return 'st-high';
+    return 'st-wait';
+  }
+
+  function nodeStatus(node) {
+    const entry = latest(node);
+    if (!entry || entry.decision === 'skipped') return 'Skipped';
+    if (failed(entry) || (node === 'verify_fidelity' && result.fidelity_passed === false)) return 'Failed';
+    if (node === 'screen_risk') {
+      if (entry.decision === 'unsafe') return 'Blocked';
+      if (entry.decision === 'redirect') return 'Redirected';
+    }
+    if (node === 'generate_response') {
+      if (entry.decision !== 'ok') return 'Unknown';
+      if (result.generation_error || !hasResponse()) return 'Failed';
+      if (entry.metrics?.simulated === true) return 'Simulated';
+      if (entry.metrics?.simulated === false) return 'Live success';
+      return 'Unknown';
+    }
+    return 'Completed';
+  }
+
+  function hasResponse() {
+    return typeof result.response === 'string' && Boolean(result.response.trim());
+  }
+
+  function outcomeStatus() {
+    const audit = latest('finalize_audit');
+    if (!audit || failed(audit)) return nodeStatus('finalize_audit');
+    switch (audit.decision) {
+      case 'answered': return nodeStatus('generate_response');
+      case 'cached': return nodeStatus('cache_lookup') === 'Completed' && result.cache_hit && hasResponse()
+        ? 'Cache hit' : 'Unknown';
+      case 'blocked': return 'Blocked';
+      case 'redirected': return 'Redirected';
+      case 'failed': return 'Failed';
+      default: return 'Unknown';
+    }
+  }
+
+  function generationMode() {
+    return outcomeStatus() === 'Cache hit' ? 'Skipped on cache hit' : nodeStatus('generate_response');
+  }
+
   function responsePanel() {
-    return '<section class="panel panel-fill">' + panelTitle(ICON.chat, 'Response (sample)') +
-      '<p class="quote">Yes — water damage from a sudden burst pipe is covered under your home policy (§4.2) up to the dwelling limit, less your deductible. To file a claim, submit it within 60 days of the loss and include photos and a repair estimate.</p></section>';
-  }
-  function panelTitle(icon, text) { return '<div class="title">' + icon + '<h2>' + esc(text) + '</h2></div>'; }
-
-  // ---------- views ----------
-  var views = {};
-
-  // The optimizer renders a static shell once; updateOptimizer() refills the live regions so
-  // typing in the prompt box never loses focus or cursor position.
-  views.optimizer = function () {
-    return header({
-      title: 'Token optimizer',
-      lede: 'Enter a prompt, then click techniques to apply them. Each one runs in order and shows exactly what it removed or rewrote.',
-      actions: '<button type="button" class="btn btn-ghost" data-act="reset">' + ICON.reset + 'Reset to recommended</button>'
-    }) +
-    '<section class="model-bar" aria-label="Model">' +
-      '<label class="model-label" for="model">Model</label>' +
-      '<select id="model" class="select model-select">' + modelOptions() + '</select>' +
-      '<span class="mono-sm" id="model-meta"></span>' +
-      '<span class="tok-note" id="tok-status" role="status" aria-live="polite"></span>' +
-    '</section>' +
-    '<section class="stats" aria-label="Token metrics" id="opt-stats"></section>' +
-    '<section class="panel" aria-label="Reduction against target" style="padding:20px" id="opt-band"></section>' +
-    '<section class="panel" aria-label="Optimization techniques">' +
-      '<div class="panel-head">' + panelTitle(ICON.sliders, 'Techniques') +
-        '<div class="row-actions"><span class="mono-sm" id="tech-count"></span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="all">Apply all</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="none">Clear all</button></div></div>' +
-      '<div class="tgrid" id="opt-techs"></div>' +
-    '</section>' +
-    '<section class="cols" aria-label="Prompt comparison">' +
-      '<article class="prompt"><div class="prompt-head">' + panelTitle(ICON.pen, 'Your prompt') +
-        '<div class="row-actions"><span class="mono-sm" id="in-tok"></span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="sample">Load sample</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="clear">Clear</button></div></div>' +
-        '<div class="prompt-body prompt-body-fill">' +
-          '<label class="sr-only" for="prompt-in">Prompt to optimize</label>' +
-          '<textarea id="prompt-in" class="prompt-in" spellcheck="false" placeholder="Paste a system prompt, context and question…">' + esc(state.prompt) + '</textarea>' +
-          '<p class="hint" id="tok-hint"></p>' +
-        '</div></article>' +
-      '<article class="prompt"><div class="prompt-head">' + panelTitle(ICON.compress, 'Optimized prompt') +
-        '<div class="row-actions" style="gap:4px"><span class="mono-sm" id="opt-tok"></span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-act="diff" id="diff-btn">Show changes</button>' +
-        '<button type="button" class="icon-btn" data-act="copy" aria-label="Copy optimized prompt">' + ICON.copy + '</button></div></div>' +
-        '<div class="prompt-body"><div class="sec-text" id="opt-opt"></div></div></article>' +
-    '</section>' +
-    '<div class="legend-row" id="opt-legend">' +
-      '<span><span class="seg-cut chip">removed</span>Cut by an applied technique</span>' +
-      '<span><span class="seg-add chip">rewritten</span>Replaced with a shorter form</span>' +
-      '<span><span class="seg-cut chip hl">outlined</span>Changed by the technique you clicked last</span>' +
-    '</div>' +
-    '<div class="cols">' +
-      '<section class="panel" aria-label="Step by step"><div class="panel-head">' + panelTitle(ICON.steps, 'Step by step') + '</div><div class="steps" id="opt-steps"></div></section>' +
-      '<section class="panel" aria-label="Decision log" style="gap:12px"><div class="panel-head">' + panelTitle(ICON.term, 'Decision log') +
-        '<a href="#audit" style="font-size:12.5px;display:inline-flex;align-items:center;min-height:32px">Open audit log</a></div><div id="opt-log"></div></section>' +
-    '</div>';
-  };
-
-  function updateOptimizer() {
-    var r = compute(), on = state.on;
-    requestSpacy([state.prompt, r.optText]);
-    var $ = function (id) { return document.getElementById(id); };
-    if (!$('opt-stats')) return;
-
-    $('in-tok').textContent = r.ap + r.orig + ' tok';
-    $('tok-hint').textContent = exact()
-      ? 'Counts use the ' + model().name + ' tokenizer (' + model().tokenizer + '), run in your browser. Your prompt never leaves your browser.'
-      : 'Counts are estimated with a heuristic until the ' + model().name + ' tokenizer loads' + (tok.status === 'error' ? ' (it failed to load, so estimates are shown)' : '') + '. Your prompt never leaves your browser.';
-    $('tech-count').textContent = r.activeCount + ' of ' + TECHS.length + ' applied';
-
-    $('opt-techs').innerHTML = TECHS.map(function (t, i) {
-      var isOn = !!on[t.id];
-      var s = r.stepById[t.id];
-      var delta = isOn ? (s.before - s.after) : r.potential[t.id];
-      var deltaHtml = isOn
-        ? '<span class="tb-delta d-on">−' + delta + '</span>'
-        : '<span class="tb-delta d-off" title="Estimated saving if applied">' + (delta > 0 ? '−' + delta : '0') + '</span>';
-      return '<button type="button" class="tbtn" data-tech="' + t.id + '" aria-pressed="' + isOn + '">' +
-        '<span class="tb-top"><span class="tb-box">' + (isOn ? ICON.tick : '') + '</span>' +
-        '<span class="tb-name">' + (i + 1) + '. ' + esc(t.name) + '</span>' + deltaHtml + '</span>' +
-        '<span class="tb-desc">' + esc(t.desc) + '</span>' +
-        (t.risk ? '<span class="risk">' + ICON.warn + 'Fidelity risk</span>' : '') +
-      '</button>';
-    }).join('');
-
-    $('opt-stats').innerHTML =
-      stat('Original input', r.ap + r.orig, 'tok', spacySub(state.prompt)) +
-      stat('Optimized input', r.ap + r.after, 'tok', spacySub(r.optText)) +
-      stat('Reduction', r.pct.toFixed(1) + '%', '−' + r.saved + ' tok', spacyReduction(state.prompt, r.optText), true) +
-      stat('Est. savings / day', '$' + r.savedDay.toFixed(2), '', fmt(state.qpd) + ' queries at ' + priceFmt(state.price) + ' / 1M tok');
-
-    $('opt-band').innerHTML =
-      '<div class="panel-head">' + panelTitle(ICON.target, 'Target band · 30–50% input reduction') +
-      '<span class="pill ' + r.status.cls + '">' + r.status.label + '</span></div>' +
-      '<div class="band"><div class="band-target"></div><div class="band-fill" style="width:' + (Math.min(r.pct, 80) / 80 * 100) + '%"></div></div>' +
-      '<div class="ticks"><span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span></div>';
-
-    // "Show changes" renders removals inline (struck through) and rewrites highlighted;
-    // off, it shows the clean prompt exactly as it would be sent.
-    var diff = state.showDiff, optHtml = '', hasText = false;
-    r.units.forEach(function (u) {
-      u.pieces.forEach(function (p) {
-        var hl = p.tech && p.tech === state.lastTech ? ' hl' : '';
-        var title = p.tech ? ' title="' + esc(TECH_BY_ID[p.tech].name) + '"' : '';
-        if (p.kind === 'keep') { optHtml += esc(p.text); if (p.text.trim()) hasText = true; }
-        else if (p.kind === 'add') { optHtml += diff ? '<span class="seg-add' + hl + '"' + title + '>' + esc(p.text) + '</span>' : esc(p.text); hasText = true; }
-        else if (p.kind === 'cut' && diff) optHtml += '<span class="seg-cut' + hl + '"' + title + '>' + esc(p.tech === 'whitespace' ? showWs(p.text) : p.text) + '</span>';
-      });
-    });
-    $('opt-opt').innerHTML = hasText ? '<span class="seg-keep">' + optHtml + '</span>' : '<span class="sec-empty">Enter a prompt on the left to see the optimized version here.</span>';
-    $('opt-tok').textContent = r.ap + r.after + ' tok';
-    $('diff-btn').setAttribute('aria-pressed', String(diff));
-    $('opt-legend').hidden = !diff;
-
-    $('opt-steps').innerHTML = TECHS.map(function (t, i) {
-      var s = r.stepById[t.id];
-      if (!s) {
-        var pot = r.potential[t.id];
-        return '<div class="step off"><div class="step-head"><span class="step-num">' + (i + 1) + '</span><span class="step-name">' + esc(t.name) + '</span>' +
-          '<span class="mono-sm">skipped</span></div><div class="step-note">' + (pot > 0 ? 'Not applied · could save ' + r.ap + pot + ' tok' : 'Not applied · nothing to change in this prompt') + '</div></div>';
-      }
-      var chips = s.changes.slice(0, 6).map(function (c) {
-        if (t.id === 'whitespace') return '<span class="chip seg-cut">' + esc(showWs(c.from)) + '</span>';
-        if (c.to) return '<span class="chip seg-cut">' + esc(snippet(c.from)) + '</span><span class="muted" aria-hidden="true">→</span><span class="chip seg-add">' + esc(c.to) + '</span>';
-        return '<span class="chip seg-cut">' + esc(snippet(c.from)) + '</span>';
-      }).join('');
-      var more = s.changes.length > 6 ? '<span class="mono-sm" style="align-self:center">+' + (s.changes.length - 6) + ' more</span>' : '';
-      return '<div class="step on"><div class="step-head"><span class="step-num">' + (i + 1) + '</span><span class="step-name">' + esc(t.name) + '</span>' +
-        '<span class="mono-sm">' + s.before + ' → ' + s.after + '</span><span class="delta d-on">−' + (s.before - s.after) + '</span></div>' +
-        (s.changes.length ? '<div class="step-chips">' + chips + more + '</div>' : '<div class="step-note">Applied · no matches in this prompt</div>') + '</div>';
-    }).join('');
-
-    $('opt-log').innerHTML = logBlock(r.log);
-  }
-
-  views.overview = function () {
-    var r = compute();
-    var routed = state.stage >= 6;
-    return header({ title: 'Overview', lede: 'End-to-end view of query #Q-0001 as it moves through the governed gateway.' }) +
-      '<section class="stats">' +
-        stat('Stages complete', Math.min(state.stage, STAGES.length) + ' / ' + STAGES.length, '') +
-        stat('Input tokens', r.ap + r.after, 'tok', 'from ' + r.ap + r.orig + ' original · ' + model().name) +
-        stat('Reduction', r.pct.toFixed(1) + '%', '', r.status.label, true) +
-        stat('Est. savings / day', '$' + r.savedDay.toFixed(2), '', fmt(state.qpd) + ' queries / day') +
-      '</section>' +
-      '<div class="cols">' +
-        '<section class="panel panel-fill">' + panelTitle(ICON.chat, 'Incoming prompt') +
-          '<p class="quote">' + (state.prompt.trim() ? esc(state.prompt.length > 700 ? state.prompt.slice(0, 700) + '…' : state.prompt) : '<span class="muted">No prompt entered yet.</span>') + '</p>' +
-          '<div class="rows">' +
-            '<div class="row"><div class="row-main"><span class="row-title">Intent</span><span class="row-sub">claims.coverage_question · confidence 0.96 (sample)</span></div><span class="pill st-in">Classified</span></div>' +
-          '</div>' +
-        '</section>' +
-        '<section class="panel panel-fill">' + panelTitle(ICON.route, 'Stage status') +
-          '<div class="rows">' + STAGES.map(function (s, i) {
-            var st = i < state.stage ? ['Done', 'st-in'] : i === state.stage ? ['In progress', 'st-high'] : ['Pending', 'st-wait'];
-            return '<div class="row"><div class="row-main"><a class="row-title" href="#' + s.route + '" style="text-decoration:none">' + esc(s.label) + '</a></div><span class="pill ' + st[1] + '">' + st[0] + '</span></div>';
-          }).join('') + '</div>' +
-        '</section>' +
-      '</div>' +
-      (routed ? responsePanel() : '');
-  };
-
-  views.risk = function () {
-    var checks = [
-      ['PII detection', 'No unmasked account numbers, SSNs or card data in the prompt.', 'Pass'],
-      ['Prompt injection', 'No instruction-override patterns found in user or retrieved text.', 'Pass'],
-      ['Topic policy', 'Claims and coverage questions are in scope for this profile.', 'Pass'],
-      ['Legal advice request', 'Query asks about coverage, not legal interpretation.', 'Pass'],
-      ['Account change request', 'No account changes requested; no escalation needed.', 'Pass']
-    ];
-    return header({ title: 'Risk screening', lede: 'Every query is screened against the policy profile before any tokens are optimized or sent to a model.' }) +
-      '<section class="stats">' + stat('Checks run', checks.length, '') + stat('Passed', checks.length, '', '', true) + stat('Blocked', 0, '') + stat('Screen latency', '13', 'ms') + '</section>' +
-      '<section class="panel">' + '<div class="panel-head">' + panelTitle(ICON.shield, 'Screening results (sample)') + '<span class="pill st-in">Passed</span></div>' +
-        '<div class="rows">' + checks.map(function (c) {
-          return '<div class="row"><div class="row-main"><span class="row-title">' + c[0] + '</span><span class="row-sub">' + c[1] + '</span></div><span class="pill st-in">' + c[2] + '</span></div>';
-        }).join('') + '</div></section>';
-  };
-
-  views.cache = function () {
-    var r = compute();
-    if (state.stage < 3) {
-      return header({ title: 'Semantic cache', lede: 'Looks up semantically similar answered queries so repeat questions skip the model entirely.' }) +
-        '<div class="empty">Waiting on the token optimizer.<br>Finish optimizing the prompt to run a cache lookup.<br><br><a class="btn btn-primary" href="#optimizer">Back to token optimizer' + ICON.arrow + '</a></div>';
+    const status = {
+      blocked: 'Blocked', redirected: 'Redirected', cached: 'Cache hit'
+    }[result.final_status] ?? nodeStatus('generate_response');
+    const labels = {
+      'Live success': 'Model response',
+      Simulated: 'Simulated response',
+      'Cache hit': 'Cached response',
+      Blocked: 'Blocked request',
+      Redirected: 'Redirected request'
+    };
+    const title = labels[status] ?? 'Gateway response';
+    if (result.final_status === 'failed') {
+      const attempt = latest('generate_response');
+      return panel('chat', 'Generation failed', quote(
+        (failed(attempt) ? attempt.reason : null)
+          || result.generation_error || 'The gateway returned no answer.'
+      ));
     }
-    var hits = [
-      ['Does my home insurance cover a burst pipe?', 0.89, 'Different policy section cited · stale (41 days)'],
-      ['How do I file a claim for water damage?', 0.86, 'Answers half the question'],
-      ['Is flood damage covered under my home policy?', 0.71, 'Flood ≠ sudden pipe burst'],
-      ['How long do I have to file a home claim?', 0.64, 'Partial overlap']
-    ];
-    return header({ title: 'Semantic cache', lede: 'Looks up semantically similar answered queries so repeat questions skip the model entirely.' }) +
-      '<section class="stats">' + stat('Lookup key', r.ap + r.after, 'tok') + stat('Best similarity', '0.89', '') + stat('Hit threshold', '0.92', '') + stat('Result', 'Miss', '', 'Query forwarded to routing', true) + '</section>' +
-      '<section class="panel"><div class="panel-head">' + panelTitle(ICON.db, 'Nearest cached queries (sample)') + '<span class="pill st-low">Below threshold</span></div>' +
-        '<div class="rows">' + hits.map(function (h) {
-          return '<div class="row"><div class="row-main"><span class="row-title">' + esc(h[0]) + '</span><span class="row-sub">' + esc(h[2]) + '</span></div>' +
-            '<span class="meter" aria-hidden="true"><span style="width:' + h[1] * 100 + '%"></span></span><span class="mono-sm" style="min-width:36px;text-align:right">' + h[1].toFixed(2) + '</span></div>';
-        }).join('') + '</div></section>';
-  };
-
-  views.routing = function () {
-    var r = compute();
-    if (state.stage < 4) {
-      return header({ title: 'Model routing', lede: 'Chooses the cheapest model tier that meets the query’s quality and compliance requirements.' }) +
-        '<div class="empty">Waiting on the cache lookup.<br>Routing runs after a cache miss.<br><br><a class="btn btn-primary" href="#cache">Go to semantic cache' + ICON.arrow + '</a></div>';
-    }
-    var tiers = [
-      { name: 'Small · fast', mult: 0.1, note: 'Fails grounding check on multi-part claims questions', pick: false },
-      { name: 'Medium · balanced', mult: 1, note: 'Meets grounding and citation requirements', pick: true },
-      { name: 'Large · reasoning', mult: 5, note: 'Not needed: no multi-document reasoning', pick: false }
-    ];
-    return header({ title: 'Model routing', lede: 'Chooses the cheapest model tier that meets the query’s quality and compliance requirements.' }) +
-      '<section class="panel"><div class="panel-head">' + panelTitle(ICON.route, 'Candidate tiers') + '<span class="mono-sm">' + r.ap + r.after + ' input tok</span></div>' +
-        '<div class="rows">' + tiers.map(function (t) {
-          var price = state.price * t.mult;
-          var cost = r.after / 1e6 * price;
-          return '<div class="row"><div class="row-main"><span class="row-title">' + esc(t.name) + '</span><span class="row-sub">' + esc(t.note) + ' · ' + priceFmt(price) + ' / 1M tok</span></div>' +
-            '<span class="mono-sm">' + money(cost) + ' / query</span>' +
-            '<span class="pill ' + (t.pick ? 'st-in' : 'st-wait') + '">' + (t.pick ? 'Selected' : 'Skipped') + '</span></div>';
-        }).join('') + '</div></section>' +
-      '<section class="stats">' +
-        stat('Cost / query (optimized)', money(r.after / 1e6 * state.price), '') +
-        stat('Cost / query (original)', money(r.orig / 1e6 * state.price), '') +
-        stat('Saved / day', '$' + r.savedDay.toFixed(2), '', '', true) +
-      '</section>' +
-      (state.stage >= 6 ? responsePanel() : '');
-  };
-
-  views.audit = function () {
-    var r = compute();
-    var rows = [
-      { t: '14:02:07.096', op: 'request.received  web_chat', v: 'Q-0001', cls: 'd-off' },
-      { t: '14:02:07.104', op: 'intent.classify  claims.coverage_question', v: '0.96', cls: 'd-off' }
-    ].concat(r.log);
-    if (state.stage >= 4) rows.push({ t: '14:02:07.239', op: 'cache.lookup  best=0.89 threshold=0.92', v: 'miss', cls: 'd-on' });
-    if (state.stage >= 5) rows.push({ t: '14:02:07.244', op: 'route.select  tier=medium', v: r.after + ' tok', cls: 'seg-keep' });
-    if (state.stage >= 6) rows.push({ t: '14:02:08.512', op: 'respond.complete', v: '200', cls: 'seg-keep' });
-    return header({ title: 'Audit log', lede: 'Every gateway decision for query #Q-0001, in order. Entries update as you change optimizer techniques.',
-      actions: '<button type="button" class="btn btn-ghost" data-act="copy-log">' + ICON.copy + 'Copy log</button>' }) +
-      '<section class="panel">' + panelTitle(ICON.term, 'Events · ' + rows.length) + logBlock(rows) + '</section>';
-  };
-
-  // ---------- render & routing ----------
-  var view = document.getElementById('view');
-  function route() {
-    var r = (location.hash || '').slice(1);
-    return views[r] ? r : 'overview';
+    const note = status === 'Simulated' ? '<p class="hint">Simulation placeholder. No provider call was made.</p>'
+      : status === 'Cache hit' ? '<p class="hint">Returned from the cache. Generation was skipped.</p>' : '';
+    return panel('chat', title, note + quote(hasResponse() ? result.response : 'The gateway returned no response text.'));
   }
+
+  function overview() {
+    const stages = [
+      ['Intent classification', 'classify_intent'], ['Risk screening', 'screen_risk'],
+      ['Token optimization', 'optimize_prompt'], ['Fidelity verification', 'verify_fidelity'],
+      ['Cache lookup', 'cache_lookup'], ['Model routing', 'route_model'],
+      ['Generation', 'generate_response'], ['Audit', 'finalize_audit']
+    ];
+    const d = result;
+    const price = latest('route_model')?.metrics?.input_price_per_million;
+    const savings = generationMode() === 'Live success' && Number.isFinite(price)
+      && Number.isFinite(d.original_tokens) && Number.isFinite(d.model_input_tokens)
+      ? (d.original_tokens - d.model_input_tokens) * price / 1_000_000 : null;
+    return responsePanel() + stats(
+      stat('Final status', d.final_status, generationMode()),
+      stat('Original tokens', number(d.original_tokens)),
+      stat('Optimized tokens', number(d.optimized_tokens)),
+      stat('Prepared prompt tokens', number(d.model_input_tokens)),
+      stat('Prepared prompt reduction', reduction(d.original_tokens, d.model_input_tokens)),
+      stat('Estimated input savings', money(savings), 'Per request at the selected model’s input rate')
+    ) + `<div class="cols">${panel('chat', 'Submitted prompt', quote(d.original_prompt)
+      + rows([row('Intent', d.intent ? `${d.intent} · confidence ${number(d.intent_confidence)}` : 'N/A')]))}
+      ${panel('route', 'Stage status', rows(stages.map(([label, node]) => row(label, '', nodeStatus(node)))))}</div>`;
+  }
+
+  function risk() {
+    const d = result;
+    const entry = latest('screen_risk');
+    const decision = { safe: 'Safe', unsafe: 'Blocked', redirect: 'Redirected' }[d.risk_label] ?? 'N/A';
+    const categories = d.risk_categories;
+    return stats(stat('Screening decision', decision), stat('Risk score', number(d.risk_score)),
+      stat('Screening latency', Number.isFinite(entry?.duration_ms) ? `${number(entry.duration_ms)} ms` : 'N/A'))
+      + panel('shield', 'Screening results', rows([
+        row('Risk classification', d.risk_label ?? 'N/A'),
+        row('Detected categories', categories?.length ? categories.join(', ') : (failed(entry) ? 'N/A' : 'None reported')),
+        row('Decision explanation', entry?.reason ?? 'N/A')
+      ]))
+      + (d.risk_label !== 'safe' ? responsePanel() : '');
+  }
+
+  function optimizer() {
+    const d = result;
+    if (!latest('optimize_prompt')) return empty('Optimization was skipped for this execution.');
+    const fidelity = latest('verify_fidelity');
+    const techniques = (d.techniques_applied ?? []).filter(t => t.changes?.length || t.tokens_before !== t.tokens_after);
+    const techniqueRows = techniques.map(t => row(t.name ?? t.id, `${number(t.tokens_before)} → ${number(t.tokens_after)} tokens`));
+    return stats(stat('Original tokens', number(d.original_tokens)), stat('Optimized tokens', number(d.optimized_tokens)),
+      stat('Optimization reduction', reduction(d.original_tokens, d.optimized_tokens)),
+      stat('Prepared prompt tokens', number(d.model_input_tokens)))
+      + `<div class="cols">${panel('doc', 'Original prompt', quote(d.original_prompt))}
+        ${panel('compress', 'Optimized prompt', quote(d.optimized_prompt))}</div>`
+      + panel('shield', 'Fidelity verification', rows([
+        row('Result', d.fidelity_passed === true ? 'Passed' : d.fidelity_passed === false ? 'Failed' : 'N/A'),
+        row('Similarity', number(d.fidelity_score)),
+        row('Decision explanation', fidelity?.reason ?? 'N/A'),
+        row('Optimization attempts', number(d.optimization_attempts))
+      ]))
+      + (d.prompt_for_model && d.prompt_for_model !== d.optimized_prompt
+        ? panel('doc', 'Prepared prompt after fidelity verification', quote(d.prompt_for_model)) : '')
+      + panel('compress', 'Applied techniques', techniqueRows.length ? rows(techniqueRows) : quote('No changes reported.'));
+  }
+
+  function cache() {
+    const lookup = latest('cache_lookup');
+    if (!lookup) return empty('Cache lookup was skipped for this execution.');
+    const d = result;
+    const status = failed(lookup) ? 'Unavailable' : d.cache_hit === true ? 'Hit' : d.cache_hit === false ? 'Miss' : 'N/A';
+    const cards = [stat('Cache status', status)];
+    if (Number.isFinite(d.cache_similarity)) cards.push(stat('Similarity', number(d.cache_similarity)));
+    if (Number.isFinite(lookup.metrics?.min_similarity)) {
+      cards.push(stat('Configured threshold', number(lookup.metrics.min_similarity)));
+    }
+    return stats(...cards)
+      + panel('db', 'Cache lookup', rows([
+        row('Backend', lookup.metrics?.backend ?? 'N/A'),
+        row('Lookup explanation', lookup.reason ?? 'N/A'),
+        row('Generation', d.cache_hit ? 'Skipped. The gateway reused the cached response.' : generationMode())
+      ]));
+  }
+
+  function auditRows(events) {
+    return rows(events.map(e => `<div class="row"><div class="row-main">
+      <span class="row-title">${escape(e.node)} · ${escape(e.decision)}</span>
+      <span class="row-sub">${escape(e.reason)}</span>
+      ${e.metrics && Object.keys(e.metrics).length ? `<details class="audit-metrics"><summary>Metrics</summary><pre>${escape(JSON.stringify(e.metrics, null, 2))}</pre></details>` : ''}
+      </div><span class="mono-sm">${Number.isFinite(e.duration_ms) ? number(e.duration_ms) + ' ms' : 'N/A'}</span></div>`));
+  }
+
+  function routing() {
+    const d = result;
+    const route = latest('route_model');
+    if (!route) return responsePanel()
+      + empty(d.cache_hit ? 'Routing and generation were skipped on a cache hit.' : 'Routing was skipped for this execution.');
+    const attempts = d.decision_log.filter(e => ['route_model', 'generate_response'].includes(e.node));
+    return responsePanel() + stats(stat('Selected model', d.model_id || 'N/A'), stat('Model tier', d.model_tier ?? 'N/A'),
+      stat('Estimated input cost', money(d.model_id ? d.cost_estimate : null)), stat('Generation', generationMode()))
+      + panel('route', 'Routing rationale', quote(route.reason))
+      + panel('term', 'Routing and generation attempts', auditRows(attempts));
+  }
+
+  function audit() {
+    const d = result;
+    return stats(stat('Final status', d.final_status), stat('Latency', Number.isFinite(d.latency_ms) ? number(d.latency_ms) + ' ms' : 'N/A'),
+      stat('Audit events', number(d.decision_log.length)))
+      + panel('term', 'Decision log', auditRows(d.decision_log)
+        + `<details class="audit-metrics"><summary>Full execution JSON</summary><pre>${escape(JSON.stringify(d, null, 2))}</pre></details>`)
+      + (d.errors?.length ? panel('term', 'Execution errors', rows(d.errors.map(e => row(e.node, e.error, 'Failed')))) : '')
+      + responsePanel();
+  }
+
+  const views = { overview, risk, optimizer, cache, routing, audit };
+  const pageNodes = { risk: 'screen_risk', optimizer: 'optimize_prompt', cache: 'cache_lookup', routing: 'route_model', audit: 'finalize_audit' };
+
+  function pageStatus(route) {
+    if (route === 'overview') return outcomeStatus();
+    const status = nodeStatus(pageNodes[route]);
+    if (route === 'optimizer' && status === 'Completed') return nodeStatus('verify_fidelity');
+    if (route === 'routing' && status === 'Completed') return nodeStatus('generate_response');
+    return status;
+  }
+
+  function currentStep() {
+    return Math.max(0, steps.findIndex(([id]) => '#' + id === location.hash));
+  }
+
   function render() {
-    var r = route();
-    view.innerHTML = views[r]();
-    if (r === 'optimizer') updateOptimizer();
-    renderSteps(r);
-    document.title = (document.querySelector('h1') || {}).textContent + ' · Prompt Gateway';
-  }
-  // Timeline nodes up to the furthest step reached are links; later ones stay locked until
-  // the user gets there with Next.
-  var timelineEl = document.getElementById('timeline'), stepbarEl = document.getElementById('stepbar');
-  function renderSteps(r) {
-    var cur = stepIndex(r);
-    timelineEl.innerHTML = STEPS.map(function (s, i) {
-      var cls = i === cur ? 'cur' : i <= state.step ? 'done' : 'locked';
-      var dot = '<span class="tl-dot">' + (cls === 'done' ? ICON.tick : i + 1) + '</span><span class="tl-label">' + esc(s.label) + '</span>';
-      return '<li class="' + cls + '">' + (cls === 'locked'
-        ? '<span class="tl-node" aria-disabled="true">' + dot + '</span>'
-        : '<a class="tl-node" href="#' + s.route + '"' + (cls === 'cur' ? ' aria-current="step"' : '') + '>' + dot + '</a>') + '</li>';
+    const current = currentStep();
+    const [id, title] = steps[current];
+    const heading = `<header class="head"><div class="head-text">
+      <div class="crumbs"><span>Pipeline</span>${ICON.chev}<span>${escape(result?.query_id ?? 'Gateway')}</span></div>
+      <h1>${title}</h1></div>
+      ${id === 'audit' && result && navigator.clipboard ? `<button type="button" id="copy-log" class="btn btn-ghost">${ICON.copy}Copy log</button>` : ''}
+      </header>`;
+    const message = {
+      idle: 'Submit a prompt to see this stage’s execution.',
+      running: 'Waiting for the gateway to finish.',
+      failed: 'The request failed before a gateway result could be displayed.'
+    }[phase];
+    view.innerHTML = heading + (result ? views[id]() : empty(message));
+    document.title = title + ' · Prompt Gateway';
+
+    timeline.innerHTML = steps.map(([route, label], i) => {
+      const status = result ? pageStatus(route) : '';
+      const tone = statusTone(status);
+      const checked = tone === 'st-in';
+      return `<li class="${i === current ? 'cur ' : ''}${checked ? 'done' : ''} ${tone}">
+        <a class="tl-node" href="#${route}" ${i === current ? 'aria-current="step"' : ''}>
+          <span class="tl-dot">${checked ? ICON.tick : i + 1}</span>
+          <span class="tl-label">${label}</span>${status ? `<span class="tl-status">${status}</span>` : ''}
+        </a></li>`;
     }).join('');
-
-    var next = STEPS[cur + 1], nextBtn;
-    if (r === 'routing' && state.stage >= 4 && state.stage < 6) nextBtn = '<button type="button" class="btn btn-primary" data-act="respond">Send to model' + ICON.arrow + '</button>';
-    else if (next) nextBtn = '<button type="button" class="btn btn-primary" data-act="next">Next: ' + esc(next.label) + ICON.arrow + '</button>';
-    else nextBtn = '<a class="btn btn-primary" href="#overview">Back to overview</a>';
-    stepbarEl.innerHTML = '<div class="stepbar-in"><span class="stepbar-pos">Step ' + (cur + 1) + ' of ' + STEPS.length + ' · ' + esc(STEPS[cur].label) + '</span>' +
-      '<div class="stepbar-btns">' + (cur > 0 ? '<a class="btn btn-ghost" href="#' + STEPS[cur - 1].route + '">Back</a>' : '') + nextBtn + '</div></div>';
-  }
-  function goNext() {
-    var cur = stepIndex(route()), next = STEPS[cur + 1];
-    if (!next) return;
-    // Moving forward also advances the query through the gateway stages each page gates on.
-    if (next.route === 'cache') state.stage = Math.max(state.stage, 3);
-    if (next.route === 'routing') state.stage = Math.max(state.stage, 4);
-    state.step = Math.max(state.step, cur + 1);
-    persist();
-    location.hash = next.route;
-  }
-  function refresh() {
-    persist();
-    if (route() === 'optimizer') updateOptimizer(); else render();
-    syncModelUi();
-  }
-  var toastEl = document.getElementById('toast'), toastT;
-  function toast(msg) {
-    toastEl.textContent = msg; toastEl.classList.add('show');
-    clearTimeout(toastT); toastT = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
-  }
-  function fallbackCopy(text) {
-    var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch (e) {}
-    ta.remove();
-  }
-  function copy(text, msg) {
-    var done = function () { toast(msg); };
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
-    } else { fallbackCopy(text); done(); }
-  }
-  function setPrompt(text) {
-    state.prompt = text;
-    var ta = document.getElementById('prompt-in');
-    if (ta) ta.value = text;
-    refresh();
+    const previous = steps[current - 1], next = steps[current + 1];
+    stepbar.innerHTML = `<div class="stepbar-in"><span class="stepbar-pos">Step ${current + 1} of ${steps.length} · ${title}</span>
+      <div class="stepbar-btns">${previous ? `<a class="btn btn-ghost" href="#${previous[0]}">Back</a>` : ''}
+      ${next ? `<a class="btn btn-primary" href="#${next[0]}">Next: ${next[1]} ${ICON.arrow}</a>`
+        : '<a class="btn btn-primary" href="#overview">Back to overview</a>'}</div></div>`;
   }
 
-  stepbarEl.addEventListener('click', function (e) {
-    var act = e.target.closest('[data-act]');
-    if (!act) return;
-    if (act.dataset.act === 'next') goNext();
-    else if (act.dataset.act === 'respond') { state.stage = Math.max(state.stage, 6); persist(); render(); toast('Response delivered'); }
-  });
-  view.addEventListener('click', function (e) {
-    var tb = e.target.closest('[data-tech]');
-    if (tb) {
-      var id = tb.dataset.tech;
-      state.on[id] = !state.on[id];
-      state.lastTech = state.on[id] ? id : null;
-      refresh();
-      var again = view.querySelector('[data-tech="' + id + '"]');
-      if (again) again.focus();
-      return;
+  view.addEventListener('click', async event => {
+    if (!event.target.closest('#copy-log') || !result) return;
+    const toast = document.getElementById('toast');
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(result.decision_log, null, 2));
+      toast.textContent = 'Audit log copied';
+    } catch {
+      toast.textContent = 'Could not copy the audit log';
     }
-    var act = e.target.closest('[data-act]');
-    if (!act) return;
-    switch (act.dataset.act) {
-      case 'reset': state.on = preset(); state.lastTech = null; refresh(); toast('Reset to recommended techniques'); break;
-      case 'all': state.on = preset(true); state.lastTech = null; refresh(); break;
-      case 'none': state.on = preset(false); state.lastTech = null; refresh(); break;
-      case 'diff': state.showDiff = !state.showDiff; refresh(); break;
-      case 'sample': setPrompt(SAMPLE); break;
-      case 'clear': setPrompt(''); var ta = document.getElementById('prompt-in'); if (ta) ta.focus(); break;
-      case 'copy': copy(compute().optText, 'Optimized prompt copied'); break;
-      case 'copy-log': copy(Array.prototype.map.call(view.querySelectorAll('.log div'), function (d) { return d.innerText.replace(/\n/g, '  '); }).join('\n'), 'Audit log copied'); break;
-    }
-  });
-  view.addEventListener('input', function (e) {
-    if (e.target.id === 'prompt-in') { state.prompt = e.target.value; refresh(); }
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
   });
 
-  var priceEl = document.getElementById('price'), qpdEl = document.getElementById('qpd');
-  priceEl.value = state.price; qpdEl.value = state.qpd;
-  function readNum(el, min, max, fallback) {
-    var v = parseFloat(el.value);
-    return isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
-  }
-  priceEl.addEventListener('input', function () { state.price = readNum(priceEl, 0.01, 30, state.price); refresh(); });
-  qpdEl.addEventListener('input', function () { state.qpd = Math.round(readNum(qpdEl, 100, 1000000, state.qpd)); refresh(); });
-  [priceEl, qpdEl].forEach(function (el) { el.addEventListener('blur', function () { priceEl.value = state.price; qpdEl.value = state.qpd; }); });
-
-  // Model picker: switching models swaps the tokenizer and, where the provider lists one, the price.
-  view.addEventListener('change', function (e) {
-    if (e.target.id !== 'model') return;
-    var m = MODEL_BY_ID[e.target.value];
-    state.model = m.id;
-    if (m.price != null) { state.price = m.price; priceEl.value = m.price; }
-    loadTokenizer();
-    refresh();
+  window.addEventListener('gateway-run', event => {
+    ({ phase, result } = event.detail);
+    render();
   });
-  function syncModelUi() {
-    var m = model(), meta = document.getElementById('model-meta'), st = document.getElementById('tok-status');
-    document.querySelectorAll('[data-tok-label]').forEach(function (el) { el.textContent = tokLabel(); });
-    if (!meta) return;
-    meta.textContent = m.provider + ' · ' +
-      (m.price != null ? priceFmt(m.price) + ' in / ' + priceFmt(m.priceOut) + ' out per 1M' : 'free tier, no list price · costs use the $ / 1M above');
-    st.textContent = tok.status === 'ready' ? 'Tokenizer ready · exact counts'
-      : tok.status === 'loading' ? 'Loading tokenizer…'
-      : 'Tokenizer failed to load · using estimates';
-    st.className = 'tok-note tok-' + tok.status;
-  }
-
-  window.addEventListener('hashchange', function () { render(); syncModelUi(); window.scrollTo(0, 0); });
-  loadTokenizer();
+  window.addEventListener('hashchange', () => {
+    render();
+    view.scrollIntoView({ block: 'start' });
+  });
   render();
-  syncModelUi();
 })();

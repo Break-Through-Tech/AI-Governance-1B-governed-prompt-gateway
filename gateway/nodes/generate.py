@@ -18,6 +18,27 @@ PROVIDERS = {
 }
 
 
+# Audit entries are returned to dashboard clients. Only publish known codes,
+# since a provider or intermediary can include request data in the error body.
+_GROQ_ERROR_CODES = {
+    "model_permission_blocked_org",
+    "model_permission_blocked_project",
+    "model_terms_required",
+    "model_not_found",
+    "model_decommissioned",
+}
+
+
+def _groq_error_code(error):
+    try:
+        data = json.loads(error.read(8192))
+    except (OSError, ValueError, RecursionError):
+        return None
+    details = data.get("error") if isinstance(data, dict) else None
+    code = details.get("code") if isinstance(details, dict) else None
+    return code if isinstance(code, str) and code in _GROQ_ERROR_CODES else None
+
+
 def provider_available(model):
     provider = PROVIDERS.get(model.get("provider"))
     return bool(provider and os.getenv(provider[0]))
@@ -38,7 +59,11 @@ def _complete(model, prompt):
         if not isinstance(response, str) or not response.strip():
             raise ValueError("missing answer")
     except HTTPError as error:
-        raise RuntimeError(f"{model['provider']} returned HTTP {error.code}") from None
+        provider = model["provider"]
+        with error:
+            code = _groq_error_code(error) if provider == "Groq" else None
+        detail = f" ({code})" if code else ""
+        raise RuntimeError(f"{provider} returned HTTP {error.code}{detail}") from None
     except (URLError, TimeoutError, KeyError, IndexError, TypeError, ValueError):
         raise RuntimeError(f"{model['provider']} did not return a usable completion") from None
     output_tokens = (payload.get("usage") or {}).get("completion_tokens")
