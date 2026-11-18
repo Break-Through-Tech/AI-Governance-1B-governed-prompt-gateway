@@ -4,7 +4,7 @@
 intent:                       # owner: TBD
   default_intent: general
 
-risk:                         # owner: Juee / Daniel
+risk:                         # owner: Daniel
   backend: model              # model (real classifier) | stub (phrase match; tests use this)
   block_threshold: 0.80       # risk_score >= this  -> unsafe (blocked)
   redirect_threshold: 0.50    # risk_score >= this  -> redirect (human handoff)
