@@ -23,6 +23,19 @@ The startup command uses **simulated generation** and requires zero provider key
 
 Live provider access is optional. Groq has returned HTTP 403 on completion requests even when model listing succeeded. The audit shows the status and recognized error codes when supplied. Use simulation for the team demo.
 
+## Live Gemini generation
+
+Inject `GEMINI_API_KEY` into the backend environment through your secret manager or shell. From the activated environment, start the existing gateway with a Gemini text model available to your Google project. Google lists [`gemini-3.8-flash`](https://aistudio.google.com/docs/models/gemini-3.8-flash) as a stable text model compatible with its [chat completions endpoint](https://ai.google.dev/gemini-api/docs/openai). Availability still depends on your project.
+
+```sh
+GEMINI_MODEL=gemini-3.8-flash GATEWAY_SIMULATE_GENERATION=0 OMP_NUM_THREADS=1 \
+  python -m uvicorn main:app --app-dir toxicity-detection-api --host 127.0.0.1 --port 8000
+```
+
+Gemini retries HTTP 429, 500, 502, 503, and 504 up to twice before handing the failure back to the existing router. The audit exposes HTTP status and recognized Google error codes.
+
+Run with only the Gemini provider key in that process to exercise Gemini specifically. When other providers are configured, the existing router still selects an eligible tier and model by its configured rules. The Gemini entry qualifies at every configured minimum tier. Submit a safe prompt from the dashboard and inspect Model Routing and Audit Log for the provider and the generation outcome. A cache hit reuses the stored response. Restart the worker when switching Gemini models to start with an empty cache. Safe cache misses send the prepared prompt to Google, so use public or synthetic prompts for the demo.
+
 ## Demo walkthrough
 
 1. Submit **“Can you explain how to file a home insurance claim?”** in a clean worker. Inspect the classified intent, cache miss, selected model, and simulated response.

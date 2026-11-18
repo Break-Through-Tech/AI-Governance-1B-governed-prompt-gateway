@@ -84,16 +84,17 @@ routing:                      # owner: Naivy
   max_model_fallbacks: 2      # model failures allowed before the query fails
   tier_order: [Small, Medium, Large]
   default_price_per_1m_input: 3.0     # for models with no list price (free tiers)
-  # Mirrors MODELS in website/site/app.js. price / price_out are $ per 1M tokens.
+  # price / price_out are $ per 1M tokens.
   models:
     - {id: lfm-2.5-2.6b,           tier: Small,  provider: OpenRouter,       api: "liquid/lfm-2.5-2.6b:free"}
     - {id: gpt-oss-20b,            tier: Small,  provider: Groq,             api: openai/gpt-oss-20b, price: 0.075, price_out: 0.30}
     - {id: gemma-4-26b,            tier: Medium, provider: OpenRouter,       api: "google/gemma-4-26b-a4b-it:free"}
     - {id: qwen3.8-27b,            tier: Medium, provider: Groq,             api: qwen/qwen3.8-27b, price: 0.80, price_out: 4.00}
     - {id: nemotron-3.5-lightning, tier: Medium, provider: OpenRouter,       api: "nvidia/nemotron-3.5-lightning:free"}
-    - {id: gemma-4-31b,            tier: Medium, provider: Google AI Studio, api: gemma-4-31b-it}
     - {id: gpt-oss-120b,           tier: Large,  provider: Groq,             api: openai/gpt-oss-120b, price: 0.15, price_out: 0.60}
     - {id: nemotron-3-super,       tier: Large,  provider: OpenRouter,       api: "nvidia/nemotron-3-super-120b-a12b:free"}
+    # Eligible at every intent/risk floor when Gemini is the only configured provider.
+    - {id: gemini,                tier: Large,  provider: Google AI Studio, api_env: GEMINI_MODEL}
 
 # Proposed routing thresholds; require team reveiw and evaluation
 # These do not replace node 2's block/redirect decisions

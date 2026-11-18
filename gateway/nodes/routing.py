@@ -8,7 +8,7 @@ Cost estimates cover input tokens only
 """
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
-from gateway.nodes.generate import provider_available
+from gateway.nodes.generate import provider_available, provider_model_id
 
 
 def pick_model(minimum_tier: str, failed: list[str]) -> dict:
@@ -24,7 +24,8 @@ def pick_model(minimum_tier: str, failed: list[str]) -> dict:
         candidates = [
             model for model in cfg["models"]
             if model["tier"] == tier and model["id"] not in failed
-            and (simulated or provider_available(model))
+            and ((not model.get("api_env") or provider_model_id(model)) if simulated
+                 else provider_available(model))
         ]
         
         if candidates:
