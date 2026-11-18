@@ -1,47 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Prompt Gateway</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prompt Gateway</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="live-integration.css">
 </head>
-<body>
-<div class="app">
-  <header class="top">
-    <div class="top-row">
-      <div class="brand">
-        <span class="brand-mark">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M9 12h6"/></svg>
-        </span>
-        <div class="brand-text">
-          <span class="brand-name">Prompt Gateway</span>
-          <span class="brand-sub">Insurance · Customer service</span>
-        </div>
-      </div>
-      <div class="top-cost" aria-label="Cost model">
-        <label class="field">
-          <span>$ / 1M input tok</span>
-          <input id="price" type="number" min="0.01" max="30" step="any" value="3">
-        </label>
-        <label class="field">
-          <span>Queries / day</span>
-          <input id="qpd" type="number" min="100" max="1000000" step="100" value="50000">
-        </label>
-      </div>
-    </div>
-    <nav aria-label="Gateway steps"><ol class="timeline" id="timeline"></ol></nav>
-  </header>
-
-  <main class="main">
-    <div class="wrap" id="view"></div>
-  </main>
-  <div class="stepbar" id="stepbar"></div>
-</div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="app.js"></script>
-</body>
-</html>
+<body><div class="app"><header class="top"><div class="top-row"><div class="brand"><span class="brand-mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M9 12h6"/></svg></span><div class="brand-text"><span class="brand-name">Prompt Gateway</span><span class="brand-sub">Insurance · Customer service</span></div></div><div class="top-cost" aria-label="Cost model"><a href="risk.html" style="border:1px solid #9FD9B8;border-radius:8px;padding:10px 14px;color:#9FD9B8;text-decoration:none;font-size:13px;font-weight:600;align-self:center">Live risk screening ↗</a><label class="field"><span>$ / 1M input tok</span><input id="price" type="number" min="0.01" max="30" step="any" value="3"></label><label class="field"><span>Queries / day</span><input id="qpd" type="number" min="100" max="1000000" step="100" value="50000"></label></div></div><nav aria-label="Gateway steps"><ol class="timeline" id="timeline"></ol></nav></header><main class="main"><div class="wrap" id="view"></div></main><div class="stepbar" id="stepbar"></div></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="app.js"></script><script src="live-integration.js"></script>
+</body></html>

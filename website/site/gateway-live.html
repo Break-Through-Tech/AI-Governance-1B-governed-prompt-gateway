@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Live Governed Prompt Gateway</title><style>
+:root{color-scheme:dark;font:15px system-ui,-apple-system,sans-serif;background:#0b1020;color:#e7edf9}*{box-sizing:border-box}body{max-width:1100px;margin:auto;padding:32px 20px}a{color:#a5c9ff}h1{font-size:2rem;margin:0 0 8px}p{color:#aebbd0}textarea{width:100%;min-height:155px;resize:vertical;background:#131e34;border:1px solid #3a4b67;border-radius:12px;color:#fff;padding:15px;font:inherit}button{background:#7b9cff;color:#071329;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;margin:12px 0}button:disabled{opacity:.6}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.panel{background:#131e34;border:1px solid #33435e;border-radius:12px;padding:16px;margin:14px 0}.label{color:#9eafcb;font-size:12px;text-transform:uppercase;letter-spacing:.07em}.value{font-size:21px;font-weight:750;margin-top:7px;overflow-wrap:anywhere}.safe{color:#73e4a2}.unsafe{color:#ff8f9c}.warn{color:#ffd18c}pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#d5e1f6}details{margin-top:12px}summary{cursor:pointer}#error{color:#ff8f9c}#results[hidden]{display:none}
+</style></head><body>
+<p><a href="/dashboard/">← Original dashboard</a> · <a href="/dashboard/risk.html">Risk-only screen</a> · <a href="/docs">API docs</a></p>
+<h1>Live Governed Prompt Gateway</h1><p>Real toxicity screening → LangGraph governance → prompt optimization → cache → model routing → simulated response → audit.</p>
+<label for="prompt">Customer query</label><textarea id="prompt" maxlength="16000" placeholder="Is water damage from a burst pipe covered by my insurance policy?"></textarea>
+<div><button id="run">Run complete gateway</button> <span id="status" role="status"></span></div><p id="error" role="alert"></p>
+<section id="results" hidden><div class="grid">
+<div class="panel"><div class="label">Safety decision</div><div class="value" id="risk"></div><p id="categories"></p></div>
+<div class="panel"><div class="label">Intent</div><div class="value" id="intent"></div></div>
+<div class="panel"><div class="label">Input token reduction</div><div class="value" id="saving"></div><p id="tokens"></p></div>
+<div class="panel"><div class="label">Cache</div><div class="value" id="cache"></div></div>
+<div class="panel"><div class="label">Recommended model</div><div class="value" id="model"></div></div>
+<div class="panel"><div class="label">Estimated cost</div><div class="value" id="cost"></div></div>
+</div><div class="panel"><div class="label">Final status and response</div><div class="value" id="final"></div><pre id="response"></pre></div>
+<div class="panel"><div class="label">Prompt actually selected for model</div><pre id="optimized"></pre></div>
+<div class="panel"><div class="label">Auditable decision log (live LangGraph)</div><div id="audit"></div></div>
+<div class="panel"><details><summary>Full backend JSON</summary><pre id="json"></pre></details></div>
+</section><script src="gateway-live.js"></script></body></html>
