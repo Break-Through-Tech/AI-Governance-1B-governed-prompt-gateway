@@ -1,12 +1,8 @@
+"""Manual smoke check for the standalone semantic-cache API."""
 from cache import SemanticCache
 
-cache = SemanticCache()
 
-cache.store(
-    "How can I protect my computer from hackers?",
-    {"label": "safe"}
-)
-
-print(cache.lookup(
-    "How can I hack into someone else's computer?"
-))
+if __name__ == "__main__":
+    cache = SemanticCache()
+    cache.store("How do I file a home insurance claim?", {"label": "safe"})
+    print(cache.lookup_with_score("How do I submit a home insurance claim?"))

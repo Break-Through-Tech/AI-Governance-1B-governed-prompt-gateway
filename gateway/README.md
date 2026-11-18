@@ -1,25 +1,13 @@
 # Gateway Backend: LangGraph Framework
 
-> **Status: scaffold built.** All 10 nodes exist and the full graph runs end to end. `optimize_prompt` and
-> `verify_fidelity` are real; the other 8 are **stubs** that return plausible values so the graph works
-> while each owner builds theirs. This document is the contract every node owner builds against.
-> Change the README first, then the code.
-
-**Quick start** (from the repo root, Python 3.12+):
+The gateway runs ten LangGraph nodes for safety screening, intent, prompt optimization,
+fidelity, semantic caching, routing, generation, and audit. Follow [RUN_DEMO.md](../RUN_DEMO.md)
+to install dependencies, start FastAPI, and run the regression tests.
 
 ```bash
-pip install -r gateway/requirements.txt
-python -m gateway.graph                       # run the UI's sample prompt and print the decision log
-python -m gateway.graph "Is hail damage covered?"
-python -m gateway.graph --json "..."          # full final state as JSON
-python -m gateway.graph --diagram             # Mermaid diagram of the compiled graph
-pytest gateway/tests                          # contract, path and optimizer tests
+python -m gateway.graph --json "Is hail damage covered?"
+python -m gateway.graph --diagram
 ```
-
-This folder will hold the backend of the Governed Prompt Gateway. Each step of the pipeline is a
-**LangGraph node**, and each decision about where a query goes next is an **edge**. The existing UI in
-`website/site/` stays as it is. It will call the graph through `website/server.py` instead of
-computing results in the browser.
 
 ---
 
@@ -122,7 +110,7 @@ related pipeline steps, not tied to one person.
   risk thresholds are proposed defaults awaiting team evaluation, node 2 handles
   blocking and redirection 
 - **`generate_response`**: calls the provider (Groq / OpenRouter / Google AI Studio), or returns a simulated
-  response when `config.simulate: true`, so the demo works offline.
+  response when `generation.simulate: true` or `GATEWAY_SIMULATE_GENERATION=1`.
 - **`finalize_audit`**: always the last node, no matter which path the query took. It computes the totals
   the dashboard shows and closes the decision log.
 
@@ -170,7 +158,7 @@ class GatewayState(TypedDict, total=False):
 
     # 7. route_model
     model_id: str
-    model_tier: Literal["Small", "Medium", "Large"]
+    model_tier: Literal["Small", "Medium", "Large"] | None
     cost_estimate: float
     failed_models: Annotated[list[str], operator.add]
 
@@ -273,7 +261,7 @@ output** below, so a bug in one node never crashes the whole gateway.
 | `optimize_prompt` | `optimized_prompt = original_prompt` | **Fail open.** We lose the savings but the answer is unaffected. |
 | `verify_fidelity` | `fidelity_passed = False` → use the original prompt | If we can't confirm the meaning survived, we don't trust the compression. |
 | `cache_lookup` | `cache_hit = False` | A cache problem only costs money. |
-| `route_model` | `config.routing.default_model` | |
+| `route_model` | No eligible model → generation ends with a recorded error | |
 | `generate_response` | `generation_error` set → model fallback branch | |
 | `cache_store` | skip (logged) | |
 | `finalize_audit` | minimal summary with `final_status` | |
@@ -295,12 +283,12 @@ gateway/
 ├── nodes/
 │   ├── __init__.py        ← NODES: name → function, in pipeline order
 │   ├── _base.py           ← safe_node decorator, decision() log helper
-│   ├── intent.py          ← classify_intent                      STUB
-│   ├── risk.py            ← screen_risk (STUB), handle_unsafe
+│   ├── intent.py          ← classify_intent                      fine-tuned RoBERTa
+│   ├── risk.py            ← screen_risk, handle_unsafe
 │   ├── optimizer.py       ← optimize_prompt, verify_fidelity      REAL
-│   ├── cache.py           ← cache_lookup, cache_store             STUB (exact match)
+│   ├── cache.py           ← cache_lookup, cache_store             semantic by default
 │   ├── routing.py         ← route_model                           intent/risk-based selection + model fallback
-│   ├── generate.py        ← generate_response                     SIMULATED
+│   ├── generate.py        ← generate_response                     live provider or explicit simulation
 │   └── audit.py           ← finalize_audit                        REAL
 └── tests/
     ├── test_contract.py   ← every node (and its crash fallback) only writes fields it owns
@@ -308,8 +296,7 @@ gateway/
     └── test_optimizer.py  ← technique and fidelity unit tests
 ```
 
-Every stub returns fixed, plausible values, so the full graph runs end to end today. Each stub's docstring
-says what the real version needs to do. To replace a stub:
+When changing a node:
 
 1. Keep the function name, the `@safe_node(...)` decorator and the returned field names.
 2. Replace the body, and return exactly one `decision(...)` in `decision_log`.
@@ -319,15 +306,15 @@ says what the real version needs to do. To replace a stub:
 
 ### Connecting to the UI
 
-`website/server.py` gets one new endpoint:
+FastAPI serves the live dashboard and returns the final gateway state as JSON.
 
 ```
-POST /api/gateway/run   {"prompt": "..."}   ->   the final GatewayState as JSON
+POST /gateway/run   {"text": "..."}
 ```
 
-Each UI page reads its fields from that response (Risk screening ← `risk_*`, Token optimizer ←
-`optimized_*` / `techniques_applied` / `fidelity_*`, Semantic cache ← `cache_*`, Model routing ←
-`model_*` / `cost_estimate`, Audit log ← `decision_log`). The page layout and styles stay the same.
+The live panel renders the audit log and stage outputs from that response. Semantic cache misses
+include the best eligible similarity when one exists. The score is absent when there is no eligible
+entry or the cache fails.
 
 ---
 

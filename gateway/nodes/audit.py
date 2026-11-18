@@ -25,10 +25,13 @@ def _latency(state) -> int:
 @safe_node("finalize_audit", fallback=lambda s: {"final_status": final_status(s), "latency_ms": _latency(s)})
 def finalize_audit(state):
     status = final_status(state)
-    sent_to_model = status in ("answered", "failed")
+    answered_live = status == "answered" and any(
+        e["node"] == "generate_response" and e["decision"] == "ok"
+        and e["metrics"].get("simulated") is False for e in state.get("decision_log", [])
+    )
     orig, used = state.get("original_tokens"), state.get("model_input_tokens")
     tokens_saved = orig - used if orig is not None and used is not None and status != "blocked" else 0
-    total_cost = state.get("cost_estimate", 0.0) if sent_to_model else 0.0
+    total_cost = state.get("cost_estimate", 0.0) if answered_live else 0.0
     latency = _latency(state)
     return {
         "final_status": status,

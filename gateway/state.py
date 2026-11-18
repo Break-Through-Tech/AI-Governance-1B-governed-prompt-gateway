@@ -39,11 +39,11 @@ class GatewayState(TypedDict, total=False):
 
     # 6, 9. cache_lookup / cache_store
     cache_hit: bool
-    cache_similarity: float
+    cache_similarity: float             # absent if no eligible cache comparison took place
 
     # 7. route_model
     model_id: str
-    model_tier: Literal["Small", "Medium", "Large"]
+    model_tier: Literal["Small", "Medium", "Large"] | None
     cost_estimate: float
     failed_models: Annotated[list[str], operator.add]
 

@@ -1,5 +1,6 @@
 """Loads gateway/config.yaml once. Tests change values with `override`."""
 import copy
+import os
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -39,3 +40,8 @@ def override(values: dict):
         yield
     finally:
         _overrides.remove(values)
+
+
+def generation_simulated() -> bool:
+    """Allow a credential-free demo without switching the screening models."""
+    return get("generation")["simulate"] or os.getenv("GATEWAY_SIMULATE_GENERATION") == "1"

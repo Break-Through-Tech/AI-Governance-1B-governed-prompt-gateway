@@ -26,6 +26,6 @@ def after_cache(state) -> str:
 def after_generate(state) -> str:
     if not state.get("generation_error"):
         return "ok"
-    if len(state.get("failed_models", [])) <= settings.get("routing")["max_model_fallbacks"]:
+    if state.get("model_id") and len(state.get("failed_models", [])) <= settings.get("routing")["max_model_fallbacks"]:
         return "error, fallback left"
     return "error, no fallback"

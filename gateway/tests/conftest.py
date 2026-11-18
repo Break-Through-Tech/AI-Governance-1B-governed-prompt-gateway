@@ -24,7 +24,8 @@ def fake_intent_model(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def risk_stub_backend():
-    """Use the deterministic risk stub during tests."""
-    with settings.override({"risk": {"backend": "stub"}}):
+def offline_backends():
+    """Use deterministic risk, cache, and generation backends during tests."""
+    with settings.override({"risk": {"backend": "stub"}, "cache": {"backend": "stub"},
+                            "generation": {"simulate": True}}):
         yield

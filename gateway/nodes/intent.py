@@ -17,6 +17,7 @@ How it works:
      unknown class, or when the top probability is below `intent.min_confidence`. route_model treats
      "unknown" as needing at least the Medium tier (README §6).
 """
+import os
 import re
 from functools import lru_cache
 
@@ -59,7 +60,8 @@ def _finetuned(model_name: str, max_length: int):
 def score_intents(question: str) -> dict[str, float]:
     """The model's probability for each label (they add up to 1)."""
     cfg = settings.get("intent")
-    probs, labels = _finetuned(cfg["finetuned_model"], cfg["finetuned_max_length"])([question])
+    model = os.getenv("GATEWAY_INTENT_MODEL") or cfg["finetuned_model"]
+    probs, labels = _finetuned(model, cfg["finetuned_max_length"])([question])
     return {label: float(p) for label, p in zip(labels, probs[0])}
 
 

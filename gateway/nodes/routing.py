@@ -8,10 +8,7 @@ Cost estimates cover input tokens only
 """
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
-
-
-def _models():
-    return {m["id"]: m for m in settings.get("routing")["models"]}
+from gateway.nodes.generate import provider_available
 
 
 def pick_model(minimum_tier: str, failed: list[str]) -> dict:
@@ -22,8 +19,13 @@ def pick_model(minimum_tier: str, failed: list[str]) -> dict:
     #finds where to begin
     start_tier = tiers.index(minimum_tier) 
     
+    simulated = settings.generation_simulated()
     for tier in tiers[start_tier:]:
-        candidates = [model for model in cfg["models"] if model["tier"] == tier and model["id"] not in failed ]
+        candidates = [
+            model for model in cfg["models"]
+            if model["tier"] == tier and model["id"] not in failed
+            and (simulated or provider_available(model))
+        ]
         
         if candidates:
             return min(candidates, key=lambda model: model.get("price", cfg["default_price_per_1m_input"],),)
@@ -37,10 +39,9 @@ def estimate_cost(model: dict, input_tokens: int) -> float:
 
 
 def _fallback(state):
-    cfg = settings.get("routing")
-    model = _models()[cfg["default_model"]]
-    return {"model_id": model["id"], "model_tier": model["tier"],
-            "cost_estimate": estimate_cost(model, state.get("model_input_tokens", 0))}
+    # Never lower the tier or retry an excluded model when routing fails.
+    return {"model_id": "", "model_tier": None, "cost_estimate": 0.0}
+
 
 def minimum_tier_for_intent(intent: str) -> str:
     cfg = settings.get("routing")
@@ -70,7 +71,7 @@ def route_model(state):
     
     risk_score = state["risk_score"]
     if not 0 <= risk_score <= 1:
-        raise ValueError("risks_score must be between 0 and 1")
+        raise ValueError("risk_score must be between 0 and 1")
     risk_tier = minimum_tier_for_risk(risk_score)
     minimum_tier = max(intent_tier, risk_tier, key=tiers.index)
     
