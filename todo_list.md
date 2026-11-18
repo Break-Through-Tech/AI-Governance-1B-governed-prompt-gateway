@@ -23,6 +23,7 @@ See `gateway/README.md` for the full contract (state fields, edges, rules).
 ### Nodes
 | # | Node | Owner | What it does |
 |---|---|---|---|
+| 2 | `screen_risk` | Juee / Daniel | Detector softmax → `risk_score`; classifier category for non-safe prompts; models load on first call; `risk.backend: stub` for tests |
 | 3 | `handle_unsafe` | Juee / Daniel | Returns the block/redirect message from `config.yaml`; unsafe prompts never reach a model |
 | 4 | `optimize_prompt` | Riya | Shortens the prompt with several techniques |
 | 5 | `verify_fidelity` | Riya | Checks the shortened prompt kept its meaning; retries or falls back to the original |
@@ -36,11 +37,6 @@ See `gateway/README.md` for the full contract (state fields, edges, rules).
 - [ ] **`classify_intent`** (node 1). Owner: **_unassigned_**
   - Now: always returns `general`.
   - Needed: a real intent classifier (claims, billing, policy question, …). Keep the same returned fields.
-- [ ] **`screen_risk`** (node 2). Owner: Juee / Daniel
-  - Now: matches phrases listed in `config.yaml`.
-  - Needed: wrap `toxicity-detection-api/pipeline.py`, using the detector's softmax probability as
-    `risk_score` and the classifier's category as `risk_categories`. Load the models lazily (on first
-    call), not at import time.
 - [ ] **`cache_lookup`** (node 6). Owner: Vanessa
   - Now: in-memory cache that only matches identical prompts (case/whitespace normalized).
   - Needed: wrap `SemanticCache` from `toxicity-detection-api/cache.py`; `lookup` must also return the

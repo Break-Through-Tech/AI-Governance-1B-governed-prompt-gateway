@@ -10,9 +10,10 @@ intent:                       # owner: TBD
   min_confidence: 0.825
 
 risk:                         # owner: Juee / Daniel
+  backend: model              # model (real classifier) | stub (phrase match; tests use this)
   block_threshold: 0.80       # risk_score >= this  -> unsafe (blocked)
   redirect_threshold: 0.50    # risk_score >= this  -> redirect (human handoff)
-  # STUB ONLY: until the real classifier is wired in, these phrases mark a prompt unsafe.
+  # Used when backend: stub (tests). These phrases mark a prompt unsafe or redirect.
   stub_block_phrases:
     - ignore previous instructions
     - ignore all previous instructions

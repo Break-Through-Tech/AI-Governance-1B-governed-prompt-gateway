@@ -1,17 +1,43 @@
-"""Real ML-backed risk screening for the LangGraph gateway.
+"""Nodes 2–3: screen_risk and handle_unsafe. Owner: Juee / Daniel.
 
-Uses the same in-process toxicity pipeline as the FastAPI /check endpoint.
-A classifier failure is handled by @safe_node as a human redirect (fail closed).
-The detector provides a binary decision, not a calibrated probability.
+screen_risk wraps toxicity-detection-api/pipeline.py. The detector's softmax probability for the
+toxic class is `risk_score`, and the classifier's category is `risk_categories` (only for prompts
+that are not safe). `risk.backend` in config.yaml picks `model` (real) or `stub` (phrase match,
+used by tests). The models load on the first call, not at import time.
 """
-from importlib import import_module
+import importlib.util
+from functools import lru_cache
+from pathlib import Path
+
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
 
+PIPELINE_PATH = Path(__file__).resolve().parents[2] / "toxicity-detection-api" / "pipeline.py"
 GENERIC_REFUSAL = "I can't help with that request."
 
 
+@lru_cache(maxsize=1)
+def _pipeline():
+    """Load toxicity-detection-api/pipeline.py on first use. Running it loads all three models."""
+    spec = importlib.util.spec_from_file_location("toxicity_pipeline", PIPELINE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _toxic_probability(text: str) -> float:
+    """Softmax probability the detector gives the toxic class (index 1), from 0 to 1."""
+    import torch
+
+    p = _pipeline()
+    with torch.no_grad():
+        enc = p.det_tokenizer([text], truncation=True, max_length=512, return_tensors="pt")
+        logits = p.det_model(**enc).logits
+    return float(torch.softmax(logits, dim=-1)[0, 1])
+
+
 def label_for(score: float) -> str:
+    """Turn a risk score into a label using the thresholds in config.yaml (README §5)."""
     cfg = settings.get("risk")
     if score >= cfg["block_threshold"]:
         return "unsafe"
@@ -20,35 +46,62 @@ def label_for(score: float) -> str:
     return "safe"
 
 
-@safe_node("screen_risk", fallback=lambda s: {
-    "risk_label": "redirect", "risk_categories": ["screening_unavailable"]
-})
-def screen_risk(state):
-    pipeline = import_module("pipeline")
-    result = pipeline.run_pipeline(state["original_prompt"])
-    if not isinstance(result, dict) or result.get("label") not in ("safe", "unsafe"):
-        raise ValueError("Unexpected toxicity model response")
+def _stub_score(text: str, cfg: dict) -> tuple[float, list[str], dict]:
+    """Phrase match against the stub lists in config.yaml. Used by tests so they run offline."""
+    lowered = text.lower()
+    blocked = [p for p in cfg["stub_block_phrases"] if p in lowered]
+    redirected = [p for p in cfg["stub_redirect_phrases"] if p in lowered]
+    score = 0.95 if blocked else 0.60 if redirected else 0.02
+    return score, [f"stub:{p}" for p in blocked + redirected], {}
 
-    unsafe = result["label"] == "unsafe"
-    label = "unsafe" if unsafe else "safe"
-    # The detection model returns a class (0/1), not a probability.
-    # Use 0.0/1.0 as binary policy scores; do NOT present these as confidence.
-    score = 1.0 if unsafe else 0.0
-    category = result.get("category") if unsafe else None
-    categories = [category] if isinstance(category, str) and category else []
-    category_confidence = result.get("confidence") if unsafe else None
+
+def _model_score(text: str, cfg: dict) -> tuple[float, list[str], dict]:
+    """Detector probability as the score; classifier category only when the prompt is not safe."""
+    score = _toxic_probability(text)
+    if label_for(score) == "safe":
+        return score, [], {}
+    result = _pipeline().classify(text)
+    return score, [result["category"]], {"category_confidence": result["confidence"]}
+
+
+SCORERS = {"stub": _stub_score, "model": _model_score}
+
+
+def _reason(backend: str, score: float, label: str, categories: list[str], cfg: dict) -> str:
+    """One readable line for the audit log explaining which threshold decided the label."""
+    if label == "unsafe":
+        rule = f">= block threshold {cfg['block_threshold']:.2f}"
+    elif label == "redirect":
+        rule = f">= redirect threshold {cfg['redirect_threshold']:.2f}"
+    else:
+        rule = f"< redirect threshold {cfg['redirect_threshold']:.2f}"
+    tail = f"; {', '.join(categories)}" if categories else ""
+    return f"{backend}: risk_score {score:.2f} {rule}{tail}"
+
+
+# Fail closed: if screening breaks, a human handles the query; it never reaches a model.
+@safe_node("screen_risk", fallback=lambda s: {"risk_label": "redirect",
+                                              "risk_categories": ["screening_unavailable"]})
+def screen_risk(state):
+    """Score the original prompt, label it with the config thresholds, and log one decision."""
+    cfg = settings.get("risk")
+    backend = cfg.get("backend", "stub")
+    if backend not in SCORERS:
+        raise ValueError(f"unknown risk.backend {backend!r}")
+    score, categories, extra = SCORERS[backend](state["original_prompt"], cfg)
+    label = label_for(score)
     return {
         "risk_label": label,
-        "risk_score": score,
+        "risk_score": round(score, 4),
         "risk_categories": categories,
-        "decision_log": [decision(label, "ML toxicity detector decision (binary, not calibrated risk probability)",
-                                  risk_score=score, score_type="binary_detector_label",
-                                  category=category, category_confidence=category_confidence)],
+        "decision_log": [decision(label, _reason(backend, score, label, categories, cfg),
+                                  risk_score=round(score, 4), backend=backend, **extra)],
     }
 
 
 @safe_node("handle_unsafe", fallback=lambda s: {"response": GENERIC_REFUSAL, "final_status": "blocked"})
 def handle_unsafe(state):
+    """Return the block or redirect message from config.yaml; the prompt never reaches a model."""
     label = state.get("risk_label", "unsafe")
     messages = settings.get("risk")["messages"]
     status = "redirected" if label == "redirect" else "blocked"
