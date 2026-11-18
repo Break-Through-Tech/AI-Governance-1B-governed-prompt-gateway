@@ -15,3 +15,6 @@ joblib==1.6.0
 #   optimizer.token_counter: hf:<repo>                -> tokenizers
 #   optimizer.fidelity.similarity_backend: embedding  -> sentence-transformers
 # Intent classifier: torch and transformers required for real inference
+
+faiss-cpu
+sentence-transformers
