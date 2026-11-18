@@ -57,11 +57,12 @@ def test_fidelity_failure_with_no_retries_uses_original_prompt():
 
 
 def test_model_failure_falls_back_to_another_model():
-    with settings.override({"generation": {"simulate_fail_models": ["gpt-oss-120b"]}}):
+    with settings.override({"generation": {"simulate_fail_models": ["qwen3.8-27b"]}}):
         r = run("Is water damage covered?")
     assert r["final_status"] == "answered"
-    assert r["failed_models"] == ["gpt-oss-120b"]
-    assert r["model_id"] != "gpt-oss-120b" and r["model_tier"] == "Large"
+    assert r["failed_models"] == ["qwen3.8-27b"]
+    assert r["model_id"] != "qwen3.8-27b" 
+    assert r["model_tier"] == "Medium"
 
 
 def test_query_fails_after_max_model_fallbacks():

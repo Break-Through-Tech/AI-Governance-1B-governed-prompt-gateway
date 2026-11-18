@@ -2,7 +2,12 @@
 # nothing below is hardcoded in code. Each owner edits only their own section.
 
 intent:                       # owner: TBD
-  default_intent: general
+  # Node 1 uses a roberta-base model fine-tuned by "training scripts/train_intent.py" on Bitext
+  # Insurance + Retail Banking (23 intents) plus an "unknown" class trained on CLINC150.
+  # The labels live inside the model. The script fills in finetuned_model and min_confidence.
+  finetuned_model: hmmmm1234/customer-intent-roberta
+  finetuned_max_length: 64    # max tokens per question
+  min_confidence: 0.825
 
 risk:                         # owner: Juee / Daniel
   block_threshold: 0.80       # risk_score >= this  -> unsafe (blocked)
@@ -37,7 +42,44 @@ cache:                        # owner: Vanessa
   backend: stub               # stub (exact match, in memory) | semantic (toxicity-detection-api/cache.py)
   min_similarity: 0.90
 
-routing:                      # owner: TBD
+routing:                      # owner: Naivy
+  intent_min_tier:            # labels must match what classify_intent returns 
+  # Small - Straightfoward information lookup or standard instructions, with
+  # little interpretation
+
+  # Medium - Requires interpreting policy context, combining facts, or
+  # explaining a process with exceptions 
+
+  # Large - Requires substantial reasoning across multiple conditions, competing
+  # facts, or complex dispute 
+    insurance.claims.coverage_question: Medium          
+    insurance.claims.file_claim: Medium
+    insurance.claims.status: Small
+    insurance.claims.settlement: Large
+    insurance.policy.question: Medium
+    insurance.policy.change: Medium
+    insurance.policy.cancel: Small
+    insurance.quote.new_policy: Medium
+    insurance.billing.payment: Small
+    insurance.billing.dispute: Medium
+    insurance.support.complaint: Medium
+    insurance.support.info: Small
+    # retail banking 
+    banking.account.open_close: Medium 
+    banking.account.balance_activity: Small
+    banking.card.manage: Medium
+    banking.fees: Small
+    banking.atm.problem: Medium
+    banking.locations: Small
+    banking.loan.apply: Medium
+    banking.loan.manage: Medium
+    banking.transfer: Small
+    banking.password: Small
+    support.contact: Small
+    unknown: Medium
+
+  unknown_intent_tier: Medium 
+
   default_model: gpt-oss-120b
   max_model_fallbacks: 2      # model failures allowed before the query fails
   tier_order: [Small, Medium, Large]
@@ -54,6 +96,13 @@ routing:                      # owner: TBD
     - {id: llama-3.3-70b,          tier: Large,  provider: Groq,             api: llama-3.3-70b-versatile}
     - {id: gpt-oss-120b,           tier: Large,  provider: Groq,             api: openai/gpt-oss-120b, price: 0.15, price_out: 0.60}
     - {id: nemotron-3-super,       tier: Large,  provider: OpenRouter,       api: "nvidia/nemotron-3-super-120b-a12b:free"}
+
+# Proposed routing thresholds; require team reveiw and evaluation
+# These do not replace node 2's block/redirect decisions
+  risk_tier_rules:
+    - {min_score: 0.0, tier: Small}
+    - {min_score: 0.3, tier: Medium}
+    - {min_score: 0.4, tier: Large}
 
 generation:                   # owner: TBD
   simulate: true              # true = no API calls; returns a placeholder response
