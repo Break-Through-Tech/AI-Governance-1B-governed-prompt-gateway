@@ -34,7 +34,7 @@ optimizer:                    # owner: Riya
     require_question_entities: true   # every number / ID in the user's question must survive
 
 cache:                        # owner: Vanessa
-  backend: stub               # stub (exact match, in memory) | semantic (toxicity-detection-api/cache.py)
+  backend: semantic           # stub (exact match, in memory) | semantic (toxicity-detection-api/cache.py)
   min_similarity: 0.90
 
 routing:                      # owner: TBD

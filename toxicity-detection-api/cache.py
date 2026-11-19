@@ -30,7 +30,7 @@ class SemanticCache:
 
     def lookup(self, query):
         if self.index.ntotal == 0:
-            return None
+            return None, 0.0
 
         embedding = self.get_embedding(query)
 
@@ -43,9 +43,9 @@ class SemanticCache:
             similarity >= self.threshold
             and 0 <= match_index < len(self.results)
         ):
-            return self.results[match_index]
+            return self.results[match_index], similarity
 
-        return None
+        return None, similarity
 
     def store(self, query, result):
         embedding = self.get_embedding(query)
