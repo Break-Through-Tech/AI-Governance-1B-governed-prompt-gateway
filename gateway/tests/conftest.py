@@ -1,5 +1,6 @@
 import pytest
 
+from gateway import settings
 from gateway.nodes import cache
 from gateway.nodes import intent
 
@@ -20,3 +21,9 @@ def fake_intent_model(monkeypatch):
     def predict(texts):
         return [[0.9, 0.1]], ["insurance.claims.coverage_question", intent.UNKNOWN]
     monkeypatch.setattr(intent, "_finetuned", lambda *args: predict)
+
+@pytest.fixture(autouse=True)
+def risk_stub_backend():
+    """Tests use phrase-match screening so they run offline without loading the risk models."""
+    with settings.override({"risk": {"backend": "stub"}}):
+        yield
