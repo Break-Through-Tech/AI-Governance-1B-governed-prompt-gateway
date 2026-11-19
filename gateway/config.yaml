@@ -2,7 +2,12 @@
 # nothing below is hardcoded in code. Each owner edits only their own section.
 
 intent:                       # owner: TBD
-  default_intent: general
+  # Node 1 uses a roberta-base model fine-tuned by "training scripts/train_intent.py" on Bitext
+  # Insurance + Retail Banking (23 intents) plus an "unknown" class trained on CLINC150.
+  # The labels live inside the model. The script fills in finetuned_model and min_confidence.
+  finetuned_model: hmmmm1234/customer-intent-roberta
+  finetuned_max_length: 64    # max tokens per question
+  min_confidence: 0.825
 
 risk:                         # owner: Daniel
   backend: model              # model (real classifier) | stub (phrase match; tests use this)

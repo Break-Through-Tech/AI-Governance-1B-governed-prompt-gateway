@@ -14,4 +14,4 @@ joblib==1.6.0
 #   optimizer.token_counter: spacy                    -> spacy>=3.8,<3.9 (already in the root requirements.txt)
 #   optimizer.token_counter: hf:<repo>                -> tokenizers
 #   optimizer.fidelity.similarity_backend: embedding  -> sentence-transformers
-
+#   node 1 (classify_intent) with its real model     -> torch, transformers  (the tests use a stand-in)
