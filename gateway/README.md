@@ -79,7 +79,7 @@ prompt continues to the cache. See §6.)
 | 4 | `optimize_prompt` | Token optimizer | `original_prompt`, `optimizer_mode` | `optimized_prompt`, `optimized_tokens`, `techniques_applied`, `optimization_attempts` | **Riya Zingade** |
 | 5 | `verify_fidelity` | Token optimizer | `original_prompt`, `optimized_prompt` | `fidelity_score`, `fidelity_passed`, `fidelity_checks`, `optimizer_mode`, `prompt_for_model`, `model_input_tokens` | **Riya Zingade** |
 | 6 | `cache_lookup` | Semantic cache | `prompt_for_model` | `cache_hit`, `cache_similarity`, `response` (on hit) | Vanessa (wraps `toxicity-detection-api/cache.py`) |
-| 7 | `route_model` | Model routing | `intent`, `risk_score`, `model_input_tokens`, `failed_models` | `model_id`, `model_tier`, `cost_estimate` | _TBD_ |
+| 7 | `route_model` | Model routing | `intent`, `risk_score`, `model_input_tokens`, `failed_models` | `model_id`, `model_tier`, `cost_estimate` | Naivy |
 | 8 | `generate_response` | Overview | `prompt_for_model`, `model_id` | `response`, `output_tokens`, `generation_error`, `failed_models` | _TBD_ |
 | 9 | `cache_store` | Semantic cache | `prompt_for_model`, `response` | _(writes to the cache store, not state)_ | Vanessa |
 | 10 | `finalize_audit` | Audit log | everything | `final_status`, `total_cost`, `tokens_saved`, `latency_ms` | _TBD_ (integration owner) |
@@ -116,7 +116,11 @@ related pipeline steps, not tied to one person.
   computer from hackers" sits close to "how do I hack into someone's computer", so a cache placed before
   screening could hand a cached safe answer to an unsafe prompt.
 - **`route_model`**: picks the cheapest tier (Small / Medium / Large, using the model list in the UI) that
-  meets the intent's complexity and risk requirements. It skips any model in `failed_models`.
+  meets the intent's complexity and risk requirements. It skips any model in
+  `failed_models`.
+  Takes the higher of the intent-required and risk-required tiers. Mapping and
+  risk thresholds are proposed defaults awaiting team evaluation, node 2 handles
+  blocking and redirection 
 - **`generate_response`**: calls the provider (Groq / OpenRouter / Google AI Studio), or returns a simulated
   response when `config.simulate: true`, so the demo works offline.
 - **`finalize_audit`**: always the last node, no matter which path the query took. It computes the totals
@@ -295,7 +299,7 @@ gateway/
 │   ├── risk.py            ← screen_risk (STUB), handle_unsafe
 │   ├── optimizer.py       ← optimize_prompt, verify_fidelity      REAL
 │   ├── cache.py           ← cache_lookup, cache_store             STUB (exact match)
-│   ├── routing.py         ← route_model                           STUB (default model + fallback order)
+│   ├── routing.py         ← route_model                           intent/risk-based selection + model fallback
 │   ├── generate.py        ← generate_response                     SIMULATED
 │   └── audit.py           ← finalize_audit                        REAL
 └── tests/
