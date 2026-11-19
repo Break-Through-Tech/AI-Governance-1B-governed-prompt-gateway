@@ -44,4 +44,7 @@ def override(values: dict):
 
 def generation_simulated() -> bool:
     """Allow a credential-free demo without switching the screening models."""
-    return get("generation")["simulate"] or os.getenv("GATEWAY_SIMULATE_GENERATION") == "1"
+    mode = os.getenv("GATEWAY_SIMULATE_GENERATION")
+    if mode in ("0", "1"):
+        return mode == "1"
+    return get("generation")["simulate"]

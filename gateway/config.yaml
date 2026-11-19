@@ -104,5 +104,5 @@ routing:                      # owner: Naivy
     - {min_score: 0.4, tier: Large}
 
 generation:                   # owner: TBD
-  simulate: false             # true = no API calls; returns a placeholder response
+  simulate: true              # true = no API calls; returns a placeholder response
   simulate_fail_models: []    # model ids that fail on purpose (to test the fallback path)

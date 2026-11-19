@@ -32,13 +32,12 @@
 
 ## 👩🏽‍💻 **Setup and Installation**
 
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
+Start with [RUN_DEMO.md](RUN_DEMO.md) for platform-specific installation commands, first-run
+model downloads, and safe, unsafe, and cache-hit walkthroughs. After installing the demo
+dependencies, run `python -m gateway.demo` with the virtual environment’s Python and open
+[the dashboard](http://127.0.0.1:8000/dashboard/). The default uses real local ML inference and
+simulated response generation, with no generation API keys required.
 
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
 
 ---
 

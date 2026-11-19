@@ -1,23 +1,8 @@
-# Gateway backend. Install from the repo root:  pip install -r gateway/requirements.txt
-langgraph>=1.2,<2
-pyyaml>=6.0
-pytest>=9.0
+# Install PyTorch for your platform first (see RUN_DEMO.md).
+-r ../toxicity-detection-api/requirements.txt
+langgraph==1.2.20
+pyyaml==6.0.3
 
-# Needed when risk.backend: model (the default in config.yaml). Tests use the stub and don't need these.
-# Install torch first, CPU-only:  pip install torch --index-url https://download.pytorch.org/whl/cpu
-transformers==5.19.0
-huggingface_hub==1.33.0
-scikit-learn==1.6.1
-joblib==1.6.0
-
-# Optional, only when switched on in config.yaml:
-#   optimizer.token_counter: spacy                    -> spacy>=3.8,<3.9 (already in the root requirements.txt)
-#   optimizer.token_counter: hf:<repo>                -> tokenizers
-#   optimizer.fidelity.similarity_backend: embedding  -> sentence-transformers
-# Intent classifier: torch and transformers required for real inference
-
-faiss-cpu
-sentence-transformers
-
-# FastAPI TestClient for demo integration tests.
-httpx>=0.28,<1
+# Regression tests and FastAPI TestClient.
+pytest==9.2.0
+httpx==0.28.1
