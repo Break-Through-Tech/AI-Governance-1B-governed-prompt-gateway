@@ -24,7 +24,7 @@ python3.12 -m venv .venv
 ```sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/python -m pip install torch==2.15.0+cpu --index-url https://download.pytorch.org/whl/cpu
 .venv/bin/python -m pip install -r gateway/requirements.txt
 .venv/bin/python -m gateway.demo
 ```
@@ -34,10 +34,12 @@ python3.12 -m venv .venv
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+.\.venv\Scripts\python.exe -m pip install torch==2.15.0+cpu --index-url https://download.pytorch.org/whl/cpu
 .\.venv\Scripts\python.exe -m pip install -r gateway/requirements.txt
 .\.venv\Scripts\python.exe -m gateway.demo
 ```
+
+PyTorch 2.15.0 publishes a CPython 3.12 Apple Silicon wheel on [PyPI](https://pypi.org/project/torch/2.15.0/#files). On Windows and Linux, `+cpu` selects the CPU-only build from the [PyTorch wheel index](https://download.pytorch.org/whl/cpu/torch/). Install PyTorch first, then install the gateway requirements from the default package index in the same environment. Run `python -m pip check` with the venv Python to verify the installed dependencies.
 
 Open [the dashboard](http://127.0.0.1:8000/dashboard/). The launcher binds to localhost, uses one worker so repeat requests share a cache, and defaults OpenMP to one thread for CPU inference. **Generation is simulated by default, even if provider keys are present.** Stop the server with Ctrl+C.
 
