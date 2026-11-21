@@ -53,7 +53,8 @@ def build_graph():
                              "fail, no retries": "cache_lookup"})
     g.add_conditional_edges("cache_lookup", routers.after_cache,
                             {"hit": "finalize_audit", "miss": "route_model"})
-    g.add_edge("route_model", "generate_response")
+    g.add_conditional_edges("route_model", routers.after_route,
+                            {"model chosen": "generate_response", "no eligible model": "finalize_audit"})
     g.add_conditional_edges("generate_response", routers.after_generate,
                             {"ok": "cache_store", "error, fallback left": "route_model",
                              "error, no fallback": "finalize_audit"})

@@ -5,6 +5,9 @@ requirements. Chooses the cheapest available model within that tier, excluding
 failed models, and moves to higher tiers when needed. 
 
 Cost estimates cover input tokens only 
+
+If there is no model left to try, route_model returns an empty model_id.
+Then the graph skips generate_response and goes straight to finalize_audit.
 """
 from gateway import settings
 from gateway.nodes._base import decision, safe_node
@@ -76,8 +79,19 @@ def route_model(state):
     risk_tier = minimum_tier_for_risk(risk_score)
     minimum_tier = max(intent_tier, risk_tier, key=tiers.index)
     
-    model = pick_model(minimum_tier, failed)
     tokens = state.get("model_input_tokens", state.get("original_tokens", 0))
+    try:
+        model = pick_model(minimum_tier, failed)
+    except RuntimeError:
+        # pick_model raises this when every model it could use has already failed.
+        # Return an empty model_id so the graph skips generate_response.
+        reason = f"no model in tier {minimum_tier} or above can be tried"
+        return {
+            "model_id": "",
+            "model_tier": None,
+            "cost_estimate": 0.0,
+            "decision_log": [decision("no_eligible_model", reason, failed_models=failed)],
+        }
     cost = estimate_cost(model, tokens)
     reason = (
         f"intent '{intent}' requires at least {intent_tier}; " 

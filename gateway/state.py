@@ -79,5 +79,5 @@ WRITES: dict[str, set[str]] = {
     "route_model": {"model_id", "model_tier", "cost_estimate"},
     "generate_response": {"response", "output_tokens", "generation_error", "failed_models"},
     "cache_store": set(),
-    "finalize_audit": {"final_status", "tokens_saved", "total_cost", "latency_ms"},
+    "finalize_audit": {"final_status", "tokens_saved", "total_cost", "latency_ms", "response"},
 }

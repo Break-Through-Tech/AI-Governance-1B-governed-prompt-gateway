@@ -4,6 +4,7 @@ Always the last node. Works out the final status and the totals the dashboard sh
 """
 import time
 
+from gateway import settings
 from gateway.nodes._base import decision, safe_node
 
 
@@ -33,7 +34,7 @@ def finalize_audit(state):
     tokens_saved = orig - used if orig is not None and used is not None and status != "blocked" else 0
     total_cost = state.get("cost_estimate", 0.0) if answered_live else 0.0
     latency = _latency(state)
-    return {
+    result = {
         "final_status": status,
         "tokens_saved": tokens_saved,
         "total_cost": total_cost,
@@ -42,3 +43,9 @@ def finalize_audit(state):
                                   tokens_saved=tokens_saved, total_cost=total_cost,
                                   errors=len(state.get("errors", [])))],
     }
+
+    # message if query failed
+    if status == "failed":
+        result["response"] = settings.get("audit")["messages"]["failed"]
+
+    return result

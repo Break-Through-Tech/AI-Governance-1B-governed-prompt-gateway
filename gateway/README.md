@@ -44,7 +44,8 @@ flowchart TD
     verify_fidelity -- "fail, no retries" --> cache_lookup
     cache_lookup -- "hit" --> finalize_audit
     cache_lookup -- "miss" --> route_model
-    route_model --> generate_response
+    route_model -- "model chosen" --> generate_response
+    route_model -- "no eligible model" --> finalize_audit
     generate_response -- "ok" --> cache_store
     generate_response -- "error, fallback left" --> route_model
     generate_response -- "error, no fallback" --> finalize_audit
@@ -70,7 +71,7 @@ prompt continues to the cache. See §6.)
 | 7 | `route_model` | Model routing | `intent`, `risk_score`, `model_input_tokens`, `failed_models` | `model_id`, `model_tier`, `cost_estimate` | Naivy |
 | 8 | `generate_response` | Overview | `prompt_for_model`, `model_id` | `response`, `output_tokens`, `generation_error`, `failed_models` | _TBD_ |
 | 9 | `cache_store` | Semantic cache | `prompt_for_model`, `response` | _(writes to the cache store, not state)_ | Vanessa |
-| 10 | `finalize_audit` | Audit log | everything | `final_status`, `total_cost`, `tokens_saved`, `latency_ms` | _TBD_ (integration owner) |
+| 10 | `finalize_audit` | Audit log | everything | `final_status`, `total_cost`, `tokens_saved`, `latency_ms`, `response` (only when `failed`) | _TBD_ (integration owner) |
 
 **Workstreams (6):** intent · risk/safety · token optimization · caching · model routing · response + integration.
 One person can own more than one workstream, and a workstream can be shared. A workstream is a set of
@@ -219,7 +220,8 @@ sign-off from every owner who reads it (see the "Reads" column in §3).
 | | | failed and no retries left | `cache_lookup` (with the original prompt) |
 | `cache_lookup` | `cache_hit` | `True` | `finalize_audit` |
 | | | `False` | `route_model` |
-| `route_model` | | always | `generate_response` |
+| `route_model` | `model_id` | a model was chosen | `generate_response` |
+| | | `model_id` is empty (no eligible model left, or routing crashed) | `finalize_audit` (skips generation) |
 | `generate_response` | `generation_error`, `failed_models` | no error | `cache_store` |
 | | | error and `len(failed_models) <= routing.max_model_fallbacks` | `route_model` (choose another model) |
 | | | error and no fallbacks left | `finalize_audit` |
@@ -244,7 +246,8 @@ There are two kinds of fallback. **Planned branches** are part of the graph (the
 |---|---|
 | Optimized prompt changed the meaning | Retry once in `safe` mode (no context pruning / article dropping). If it still fails, send the **original** prompt. We give up the token savings rather than risk a wrong answer. |
 | Risk classifier is unsure (score between the two thresholds) | `redirect`: the query goes to a human handoff, never to a model. |
-| Model call fails (rate limit, timeout, provider down) | Add the model to `failed_models` and go back to `route_model`, which picks the next-cheapest model that qualifies (same tier first, then one tier up). With `max_model_fallbacks: 2`, a query gets 3 tries in total, then `final_status = "failed"` and the user gets a polite error message. |
+| Model call fails (rate limit, timeout, provider down) | Add the model to `failed_models` and go back to `route_model`, which picks the next-cheapest model that qualifies (same tier first, then one tier up). With `max_model_fallbacks: 2`, a query gets 3 tries in total, then `final_status = "failed"` and the user gets the polite message in `audit.messages.failed`. |
+| No eligible model left (all qualifying models failed, or none has a provider key) | `route_model` returns an empty `model_id` and logs `no_eligible_model`. The query skips `generate_response`, so a failed model is never retried, and goes straight to `finalize_audit`: `final_status = "failed"`, and the user gets the message in `audit.messages.failed`. |
 | Cache hit | Skip routing and generation completely, at zero model cost. |
 
 ### Crash handling: fail closed for safety, fail open for savings
@@ -261,10 +264,10 @@ output** below, so a bug in one node never crashes the whole gateway.
 | `optimize_prompt` | `optimized_prompt = original_prompt` | **Fail open.** We lose the savings but the answer is unaffected. |
 | `verify_fidelity` | `fidelity_passed = False` → use the original prompt | If we can't confirm the meaning survived, we don't trust the compression. |
 | `cache_lookup` | `cache_hit = False` | A cache problem only costs money. |
-| `route_model` | No eligible model → generation ends with a recorded error | |
+| `route_model` | Empty `model_id` → skips generation → `finalize_audit` marks the query `failed` | Never fall back to a model that already failed. |
 | `generate_response` | `generation_error` set → model fallback branch | |
 | `cache_store` | skip (logged) | |
-| `finalize_audit` | minimal summary with `final_status` | |
+| `finalize_audit` | minimal summary with `final_status` (and the failure message if `failed`) | |
 
 ---
 

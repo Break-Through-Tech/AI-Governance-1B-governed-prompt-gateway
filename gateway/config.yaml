@@ -106,3 +106,8 @@ routing:                      # owner: Naivy
 generation:                   # owner: TBD
   simulate: true              # true = no API calls; returns a placeholder response
   simulate_fail_models: []    # model ids that fail on purpose (to test the fallback path)
+
+audit:                        # owner: TBD (integration)
+  messages:
+    # Shown when no eligible model is left, or every model the gateway tried failed.
+    failed: "Sorry, we couldn't get an answer right now. Please try again in a moment, or contact a licensed agent."
