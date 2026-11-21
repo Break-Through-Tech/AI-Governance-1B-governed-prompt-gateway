@@ -23,6 +23,13 @@ def after_cache(state) -> str:
     return "hit" if state.get("cache_hit") else "miss"
 
 
+def after_route(state) -> str:
+    # route_model gives an empty model_id when there is no model left to try
+    if state.get("model_id"):
+        return "model chosen"
+    return "no eligible model"
+
+
 def after_generate(state) -> str:
     if not state.get("generation_error"):
         return "ok"

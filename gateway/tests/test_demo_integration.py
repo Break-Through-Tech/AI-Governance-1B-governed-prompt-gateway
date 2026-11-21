@@ -117,7 +117,8 @@ def test_failed_generation_is_not_cached(client, semantic):
     assert reply.status_code == 200
     result = reply.json()
     assert result["final_status"] == "failed"
-    assert result["generation_error"] and not result.get("response")
+    assert result["generation_error"]
+    assert result["response"] == settings.get("audit")["messages"]["failed"]
     assert semantic.index.ntotal == 0
 
 
@@ -158,8 +159,9 @@ def test_live_routing_with_no_credentials_fails_without_retry(monkeypatch):
     with settings.override({"generation": {"simulate": False}}):
         result = run("How do I file a claim?")
     assert result["final_status"] == "failed"
-    assert result["generation_error"] == "no eligible model"
+    assert result["response"] == settings.get("audit")["messages"]["failed"]
     assert sum(e["node"] == "route_model" for e in result["decision_log"]) == 1
+    assert not any(e["node"] == "generate_response" for e in result["decision_log"])
 
 
 def test_live_provider_error_retries_an_eligible_model(monkeypatch):
